@@ -1,0 +1,15 @@
+[package]
+name = "endian_trait_derive"
+version = "0.1.0"
+authors = [
+	"myrrlyn <myrrlyn@outlook.com>",
+]
+license = "MIT"
+description = "A custom derive for the Endian trait"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "0.3"
+syn = "0.11"

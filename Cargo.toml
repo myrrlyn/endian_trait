@@ -1,0 +1,14 @@
+[package]
+name = "endian_trait"
+version = "0.1.0"
+authors = [
+	"myrrlyn <myrrlyn@outlook.com>",
+]
+license = "MIT"
+description = "A trait for Endianness conversions that can be implemented on most types"
+
+[dependencies]
+endian_trait_derive = { path = "endian_trait_derive", version = "0.1" }
+
+[workspace]
+endian_trait_derive = { path = "endian_trait_derive" }
