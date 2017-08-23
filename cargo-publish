@@ -1,0 +1,7 @@
+#!/bin/sh
+
+cd endian_trait_derive/
+cargo publish
+
+cd ..
+cargo publish
