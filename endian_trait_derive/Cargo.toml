@@ -1,11 +1,18 @@
 [package]
 name = "endian_trait_derive"
-version = "0.1.0"
+version = "0.1.1"
 authors = [
 	"myrrlyn <myrrlyn@outlook.com>",
 ]
 license = "MIT"
 description = "A custom derive for the Endian trait"
+keywords = [
+	"endian",
+	"custom-derive",
+]
+readme = "README.md"
+repository = "https://github.com/myrrlyn/endian_trait"
+workspace = ".."
 
 [lib]
 proc-macro = true
