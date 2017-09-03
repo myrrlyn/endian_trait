@@ -14,31 +14,36 @@ pub trait Endian {
 
 macro_rules! implendian {
 	( $( $t:tt ),* ) => { $(
-		impl Endian for $t {
-			fn to_be(self) -> Self {
-				$t::to_be(self)
-			}
-			fn to_le(self) -> Self {
-				$t::to_le(self)
-			}
-			fn from_be(self) -> Self {
-				$t::from_be(self)
-			}
-			fn from_le(self) -> Self {
-				$t::from_le(self)
-			}
-		}
+impl Endian for $t {
+	fn to_be(self) -> Self {
+		$t::to_be(self)
+	}
+	fn to_le(self) -> Self {
+		$t::to_le(self)
+	}
+	fn from_be(self) -> Self {
+		$t::from_be(self)
+	}
+	fn from_le(self) -> Self {
+		$t::from_le(self)
+	}
+}
 	)* };
 }
 
+//  Auto-implement on the numeric primitives
 implendian!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize);
 
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use std::mem::{
+		size_of,
+		transmute,
+	};
 
 	#[repr(C)]
-	#[derive(Clone, Debug, Endian, Eq, PartialEq)]
+	#[derive(Clone, Copy, Debug, Endian, Eq, PartialEq)]
 	struct Example {
 		a: u16,
 		b: u16,
@@ -56,7 +61,7 @@ mod tests {
 	}
 
 	#[repr(C)]
-	#[derive(Clone, Debug, Endian, Eq, PartialEq)]
+	#[derive(Clone, Copy, Debug, Endian, Eq, PartialEq)]
 	struct Nested {
 		a: u64,
 		b: Example,
@@ -69,12 +74,54 @@ mod tests {
 		}
 	}
 
+	//  Time to get freaky
+	#[repr(packed)]
+	#[derive(Clone, Copy, Debug, Endian, Eq, PartialEq)]
+	struct Tuple(u64, i32, u16, i8);
+
+	fn get_tuple() -> Tuple {
+		Tuple(
+			0x0123456789ABCDEF,
+			0x02468ACD,
+			0x1337,
+			0x5A,
+		)
+	}
+
+	//  Time to get less freaky
+	//  This will work on non-repr-{C,packed} types just fine; however accessing
+	//  those as byte arrays is UB.
+	//
+	//  This is the least possibly aligned struct I can imagine, so it should be
+	//  of enormous size with lots of padding.
+	#[derive(Clone, Copy, Debug, Endian, Eq, PartialEq)]
+	struct NotC {
+		a: u8,
+		b: u16,
+		c: u8,
+		d: u32,
+		e: u8,
+		f: u64,
+	}
+
+	fn get_notc() -> NotC {
+		NotC {
+			a: 0xA5,
+			b: 0x1234,
+			c: 0x5A,
+			d: 0xdeadbeef,
+			e: 0x42,
+			f: 0xc001c0deabad1dea,
+		}
+	}
+
 	#[test]
 	fn flip_struct() {
 		let eb = get_example().to_be();
 		let el = get_example().to_le();
-		let eb: [u8; 16] = unsafe { ::std::mem::transmute(eb) };
-		let el: [u8; 16] = unsafe { ::std::mem::transmute(el) };
+		assert_eq!(size_of::<Example>(), 16);
+		let eb: [u8; 16] = unsafe { transmute(eb) };
+		let el: [u8; 16] = unsafe { transmute(el) };
 
 		//  .a
 		assert_eq!(eb[0], el[1]);
@@ -106,8 +153,8 @@ mod tests {
 		let nb = get_nested().to_be();
 		let nl = get_nested().to_le();
 
-		let nb: [u8; 24] = unsafe { ::std::mem::transmute(nb) };
-		let nl: [u8; 24] = unsafe { ::std::mem::transmute(nl) };
+		let nb: [u8; 24] = unsafe { transmute(nb) };
+		let nl: [u8; 24] = unsafe { transmute(nl) };
 
 		//  .a
 		assert_eq!(nb[0], nl[7]);
@@ -157,5 +204,78 @@ mod tests {
 		//  should just flip, then flip again, back to the original.
 		let e = get_example().to_be().to_be().to_le().to_le();
 		assert_eq!(e, get_example());
+	}
+
+	#[test]
+	fn flip_tuple() {
+		let tb = get_tuple().to_be();
+		let tl = get_tuple().to_le();
+		assert_eq!(size_of::<Tuple>(), 15);
+		let tb: [u8; 15] = unsafe { transmute(tb) };
+		let tl: [u8; 15] = unsafe { transmute(tl) };
+
+		//  .0
+		assert_eq!(tb[0], tl[7]);
+		assert_eq!(tb[1], tl[6]);
+		assert_eq!(tb[2], tl[5]);
+		assert_eq!(tb[3], tl[4]);
+		assert_eq!(tb[4], tl[3]);
+		assert_eq!(tb[5], tl[2]);
+		assert_eq!(tb[6], tl[1]);
+		assert_eq!(tb[7], tl[0]);
+
+		//  .1
+		assert_eq!(tb[8], tl[11]);
+		assert_eq!(tb[9], tl[10]);
+		assert_eq!(tb[10], tl[9]);
+		assert_eq!(tb[11], tl[8]);
+
+		//  .2
+		assert_eq!(tb[12], tl[13]);
+		assert_eq!(tb[13], tl[12]);
+
+		//  .3
+		//  This should be idempotent, since a single byte has no endian
+		assert_eq!(tb[14], tl[14]);
+	}
+
+	#[test]
+	fn flip_notc() {
+		let cb = get_notc().to_be();
+		let cl = get_notc().to_le();
+
+		assert_eq!(cb.a.from_be(), cl.a.from_le());
+		assert_eq!(cb.b.from_be(), cl.b.from_le());
+		assert_eq!(cb.c.from_be(), cl.c.from_le());
+		assert_eq!(cb.d.from_be(), cl.d.from_le());
+		assert_eq!(cb.e.from_be(), cl.e.from_le());
+		assert_eq!(cb.f.from_be(), cl.f.from_le());
+
+		assert_eq!(cb.from_be(), cl.from_le());
+		assert_eq!(cb.from_be(), get_notc());
+		assert_eq!(cl.from_le(), get_notc());
+	}
+
+	//  Let's make an abomination unto the Lord and compiler
+	//  It doesn't make any sense from a mechanical perspective to define Endian
+	//  on a zero sized type because zero sized types don't ever exist.
+	//  However, it is permissible to define all kinds of things that look at or
+	//  use the byte repr on ZSTs because, since ZSTs **have no byte repr**, we
+	//  just use it as abstract logic. ZSTs are all logically Eq since they are
+	//  all non-existent in the same way. ZSTs can also claim to implement byte
+	//  reorder methods, and the compiler will just erase them all during
+	//  monomorphization.
+	//
+	//  ¯\_(ツ)_/¯ 🤷
+
+	#[derive(Clone, Copy, Debug, Endian, PartialEq, Eq)]
+	struct Zst;
+
+	#[test]
+	fn zst() {
+		let z: Zst = Zst;
+		let z2: Zst = z.to_be();
+		assert_eq!(size_of::<Zst>(), 0);
+		assert_eq!(z, z2);
 	}
 }
