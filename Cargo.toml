@@ -10,11 +10,11 @@ readme = "README.md"
 keywords = [
 	"endian",
 ]
-repository = "https://github.com/myrrlyn/endian_trait"
 
 [dependencies.endian_trait_derive]
 path = "endian_trait_derive"
 version = "0.1"
+repository = "https://gitlab.com/myrrlyn/endian_trait"
 
 [workspace]
 members = [
