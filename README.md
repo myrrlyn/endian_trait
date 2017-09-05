@@ -1,144 +1,114 @@
 # Endian Trait
 
-This library provides a trait called `Endian` that requires four methods for
-converting to/from big/little endian orders.
+This crate provides a trait, `Endian`, which requires four methods for
+converting primitives with multi-byte representations between big- and little-
+endian orders. In addition to declaring the trait, this library implements it on
+Rust's primitives (`bool`, `char`, `{i,u}{8,16,32,64,size}`, `f32`, and `f64`).
 
-This trait is implemented on the integer primitives `{i,u}{8,16,32,64,size}`.
+An associated crate, `endian_trait_derive`, provides a custom-derive macro that
+will implement `Endian` for complex types that are composed of inner types which
+are themselves `Endian`.
 
-Any item where an endian conversion makes sense can implement this trait, and
-items composed of all `Endian` items can themselves be `Endian`
+The primary purpose of this library is to aid in the direct binary serialization
+of Rust types across machine boundaries. This is not a robust means of moving
+data across a network or filesystem, but it can be used as a basis for building
+stronger binary serialization procedures. Note that common transmission methods
+will also require implementing a conversion to/from byte arrays, which is beyond
+the scope of this library.
 
-An associated crate, `endian_trait_derive`, provides a custom derive.
+# Usage
 
-This will work on structs of integer primitives, and nested structs where inner
-structs are themselves `Endian`.
+Require this crate (`endian_trait`) in your Cargo.toml, and the
+`endian_trait_derive` crate for access to the custom derive macro.
 
-This does ***NOT*** work on tuple structs, or on enums with specified `repr`
-layouts.
+```toml
+[dependencies]
+endian_trait = "0.2"
+endian_trait_derive = "0.2"
+```
 
-I would like to expand this crate to include these types, but at the moment I am
-struggling to make the derivation macro support these types.
+Import them in your crate root:
 
 ```rust
 extern crate endian_trait;
 #[macro_use]
 extern crate endian_trait_derive;
-
-#[derive(Endian)]
-struct Example {
-    a: u64,
-    b: i32,
-    c: u16,
-    d: u8,
-}
-
-#[derive(Endian)]
-struct Nested {
-    a: Example,
-    b: u8,
-}
-
-#[test]
-fn flip_it() {
-    let e = Example {
-        a: 0x0123456789abcdef,
-        b: 0x01234567,
-        c: 0x89ab,
-        d: 0xcd,
-    };
-
-    //  I'm assuming you're on x86, a little-endian chip.
-    let Example {
-        a,
-        b,
-        c,
-        d,
-    } = e.to_be();
-
-    assert_eq!(a, 0xefcdab8967452301);
-    assert_eq!(b, 0x67452301);
-    assert_eq!(c, 0xab89);
-    assert_eq!(d, 0xcd);
-
-    let n = Nested {
-        a: Example {
-            a: a,
-            b: b,
-            c: c,
-            d: d,
-        },
-        b: 0xef,
-    };
-
-    assert_eq!(n.to_be().b == 0xef);
-}
 ```
 
-The use case for this library is for assisting with flipping complex data
-structures when they move across the network boundary. Here's an example
-demonstrating the (relative) ease of moving a (relatively) complex structure
-across a network boundary.
+and then use the `Endian` trait to flip bytes.
 
 ```rust
-extern crate endian_trait;
-#[macro_use]
-extern crate endian_trait_derive;
-
-use std::convert::{From,To};
+use endian_trait::Endian;
 
 #[derive(Endian)]
-struct ComplexData {
-    a: ChildStruct,
-    b: ChildStruct,
-}
-#[derive(Endian)]
-struct ChildStruct {
-    a: u32,
-    b: u16,
+struct Foo {
+    bar: i32,
+    baz: f64,
 }
 
-impl From<[u8; 12]> for ComplexData {
-    fn from(src: [u8; 12]) -> Self {
-        use std::mem::transmute;
-        unsafe {
-            ComplexData {
-                a: ChildStruct {
-                    a: transmute(src[.. 4]),
-                    b: transmute(src[4 .. 6]),
-                },
-                b: ChildStruct {
-                    a: transmute(src[6 .. 10]),
-                    b: transmute(src[10 ..]),
-                },
-            }.from_be()
-        }
-    }
+#[derive(Endian)]
+struct Quux {
+    f: Foo,
+    g: bool,
 }
-impl To<[u8; 12]> for ComplexData {
-    fn to(self) -> [u8; 12] {
-        use std::mem::transmute;
-        unsafe {
-            let s = self.to_be();
-            let out: [u8; 12];
-            out[.. 4] = transmute(self.a.a);
-            out[4 .. 6] = transmute(self.a.b);
-            out[6 .. 10] = transmute(self.b.a);
-            out[10 ..] = transmute(self.b.b);
-        }
-    }
-}
+
+let q = Quux {
+    f: Foo {
+        bar: 42,
+        baz: 6.283185,
+    },
+    g: true,
+}.to_be();
+
+let q2: Quux = q.from_be();
 ```
 
-Now the conversion methods that switch between the structure and a byte
-representation automatically perform endian conversion as well. You may want to
-keep endianness separate, and only do so at the network (so that you can
-serialize to bytes for non-network transmission, for example), in which case you
-would remove the Endian trait calls from the conversion traits, and do so at the
-appropriate call site, like so:
+## Useful ... Usage
+
+Endian conversions destroy the utility, and in some cases (floats, chars) the
+validity, of the data on which they are performed. Once data is transformed
+away from local endian, it can no longer be used as anything but a bare sequence
+of bytes with no further meaning. Similarly, the transformations from an order
+to local endian are only useful to perform on a sequence of bytes that are known
+to be in the right shape.
+
+This trait is thus only useful when coupled with binary serialization methods
+such as `Into<[u8; N]>` and `From<[u8; N]>`.
+
+In my projects that use this, I have the following workflow for binary ser/des:
 
 ```rust
-let s = ComplexData { /* ... */ };
-let outbound: [u8; 12] = s.to_be().into();
-let inbound: [u8; 12] = read_from_network();
-let r: ComplexData = inbound.into().from_be();
+#[derive(Endian)]
+struct Foo {
+    //  ...
+}
+impl From<[u8; N]> for Foo {
+    fn from(src: [u8; N]) -> Self {
+        //  ...
+    }
+}
+impl Into<[u8; N]> for Foo {
+    fn into(self) -> [u8; N] {
+        //  ...
+    }
+}
+
+let f: Foo = make_a_foo();
+let fbytes: [u8; N] = f.to_be().into();
+
+let raw_foo: [u8; N] = read_from_network();
+let build_foo: Foo = Foo::from(raw_foo).from_be();
 ```
+
+Do keep in mind that once data is converted to a transport endian order, it can
+no longer be considered as anything but a collection of bytes. Converting a char
+or float will almost always result in a bit pattern that is invalid to be read
+as its stated type, and will remain so until converted back to native order on
+the other side. The `From` and `Into` impls used for binary ser/des should just
+be transmutes and byte shunts, as they will be likely working with data that is
+the correct width but of logically invalid form.
+
+You could also move the endian conversions into the `From`/`Into` methods, but I
+personally prefer keeping those uncoupled.
+
+There's really no other reason to use this trait, as far as I'm aware.

@@ -1,33 +1,79 @@
-/*!
+/*! Endian conversion trait
+
+This trait declares methods that perform endian conversions on data types. For
+the primitives, which are essentially atomic in structure, this conversion is
+simple: flip all their bytes around. This conversion is also defined as inherent
+methods on the integral primitives, so `Endian::from_be(n: i32)` is equivalent
+to `::std::i32::from_be(n: i32)`
 !*/
 
-#[allow(unused_imports)]
-#[macro_use]
-extern crate endian_trait_derive;
-
+/// Convert a type from one endian order to another.
+///
+/// The standard implementation of this trait is simply to call the methods on
+/// the component members of a data type which are themselves `Endian`, until the
+/// call stack bottoms out at one of Rust's primitives.
 pub trait Endian {
+	/// Converts from host endian to big-endian order.
+	///
+	/// On big-endian platforms, this is a no-op and should be compiled out.
 	fn to_be(self) -> Self;
+	/// Converts from host endian to little-endian order.
+	///
+	/// On little-endian platforms, this is a no-op and should be compiled out.
 	fn to_le(self) -> Self;
+	/// Converts from big-endian order to host endian.
+	///
+	/// On big-endian platforms, this is a no-op and should be compiled out.
 	fn from_be(self) -> Self;
+	/// Converts form little-endian order to host endian.
+	///
+	/// On little-endian platforms, this is a no-op and should be compiled out.
 	fn from_le(self) -> Self;
 }
 
+/// Implementing Endian on the integer primitives just means delegating to their
+/// inherent methods. As there are many integer primitives, this macro kills the
+/// needless code duplication.
 macro_rules! implendian {
 	( $( $t:tt ),* ) => { $(
-impl Endian for $t {
-	fn to_be(self) -> Self {
-		$t::to_be(self)
-	}
-	fn to_le(self) -> Self {
-		$t::to_le(self)
-	}
-	fn from_be(self) -> Self {
-		$t::from_be(self)
-	}
-	fn from_le(self) -> Self {
-		$t::from_le(self)
-	}
+		impl Endian for $t {
+			fn from_be(self) -> Self {
+				$t::from_be(self)
+			}
+			fn from_le(self) -> Self {
+				$t::from_le(self)
+			}
+			fn to_be(self) -> Self {
+				$t::to_be(self)
+			}
+			fn to_le(self) -> Self {
+				$t::to_le(self)
+			}
+		}
+	)* };
 }
+/// Implement Endian on the floats by flipping their byte repr
+///
+/// The to_ conversions use bare transmute, as the result may wind up looking
+/// invalid on the host architecture when used in floating-point contexts. The
+/// from_ conversions use Rust's from_bits functions, as the final result must
+/// be a valid local floating-point number.
+macro_rules! implendian_f {
+	( $( $t:tt ),* ) => { $(
+		impl Endian for $t {
+			fn from_be(self) -> Self {
+				Self::from_bits(self.to_bits().from_be())
+			}
+			fn from_le(self) -> Self {
+				Self::from_bits(self.to_bits().from_le())
+			}
+			fn to_be(self) -> Self {
+				unsafe { ::std::mem::transmute(self.to_bits().to_be()) }
+			}
+			fn to_le(self) -> Self {
+				unsafe { ::std::mem::transmute(self.to_bits().to_le()) }
+			}
+		}
 	)* };
 }
 
@@ -47,7 +93,7 @@ impl Endian for bool {
 /// This is safe ONLY IF THE CONVERSION MAKES LOGICAL SENSE
 /// `char` is Unicode codepoints, NOT integers, so not all values of `u32` are
 /// valid values of `char`.
-/// The `to_` functions will emit potentially invalid `char` values, as this is
+/// The `to_` functions will emit potentially invalid `char` values, and this is
 /// to be expected. The `from_` functions, however, will panic if they are about
 /// to emit an invalid `char` byte value.
 impl Endian for char {
@@ -91,6 +137,10 @@ impl Endian for char {
 	}
 }
 
-//  Auto-implement on the numeric primitives
-implendian!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize);
-
+//  Auto-implement on the integer primitives
+implendian!(i8, i16, i32, i64, isize);
+//  Auto-implement on floats
+implendian_f!(f32, f64);
+//  Auto-implement on the remaining integer primitives
+//  I'm a sucker for alphabetization.
+implendian!(u8, u16, u32, u64, usize);

@@ -6,5 +6,4 @@ or open a PR.
 
 I think *this* crate is done; I need help on `endian_trait_derive` though. I
 want to extend the custom derivation to cover enums with `#[repr(...)]`
-annotations, and tuple structs. I will document my issues more in the child
-crate.
+annotations. I will document my issues more in the child crate.
