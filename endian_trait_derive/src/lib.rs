@@ -51,22 +51,33 @@ use syn::{
 	VariantData,
 };
 
+/// Hook for receiving `#[derive(Endian)]` code
 #[proc_macro_derive(Endian)]
 pub fn endian_trait(source: TokenStream) -> TokenStream {
 	let s = source.to_string();
+	//  TODO: Handle parse failure
 	let ast = syn::parse_derive_input(&s).unwrap();
 	let imp = impl_endian(&ast);
+	//  TODO: Handle reparse failure
 	imp.parse().unwrap()
 }
 
+/// Code generator for Endian implementations
 fn impl_endian(ast: &DeriveInput) -> Tokens {
 	let name = &ast.ident;
-	match &ast.body {
-		&Body::Enum(ref _variants) => {
+	match ast.body {
+		//  TODO: Enum support
+		//  Enums can only be accepted if they are without data payloads and are
+		//  of known repr. I don't know how Rust chooses internal repr for enum
+		//  types, so this will have to reject any enums that are not carrying
+		//  a repr annotation. repr(C) is i32
+		Body::Enum(ref _variants) => {
 			unimplemented!("I have not yet learned enough `quote` to do this");
 		},
-		&Body::Struct(VariantData::Struct(ref fields)) => {
-			//  I know that this is a named-field struct, so unwrap is fine.
+		//  Normal struct with named fields
+		Body::Struct(VariantData::Struct(ref fields)) => {
+			//  Collect all the names. This should be infallible, hence the
+			//  unreachable! in the None branch.
 			let names: Vec<_> = fields.iter().map(|f| match f.ident {
 				Some(ref n) => n,
 				None => unreachable!("Struct fields MUST have idents"),
@@ -91,7 +102,7 @@ impl Endian for #name {
 }
 			}
 		},
-		&Body::Struct(VariantData::Tuple(ref fields)) => {
+		Body::Struct(VariantData::Tuple(ref fields)) => {
 			//  Tuples don't have field names. For each field, get its index,
 			//  and convert from the raw number into an Ident.
 			//  This is necessary as usize serializes as VALusize, not VAL.
@@ -115,7 +126,7 @@ impl Endian for #name {
 }
 			}
 		},
-		&Body::Struct(VariantData::Unit) => {
+		Body::Struct(VariantData::Unit) => {
 			quote! {
 impl Endian for #name {
 	fn from_be(self) -> Self { self }
