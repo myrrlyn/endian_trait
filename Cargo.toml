@@ -1,6 +1,6 @@
 [package]
 name = "endian_trait"
-version = "0.1.1"
+version = "0.2.0"
 authors = [
 	"myrrlyn <myrrlyn@outlook.com>",
 ]
@@ -11,6 +11,9 @@ keywords = [
 	"endian",
 ]
 repository = "https://gitlab.com/myrrlyn/endian_trait"
+excludes = [
+	"cargo-publish",
+]
 
 [workspace]
 members = [

@@ -2,6 +2,7 @@
 
 cd endian_trait_derive/
 cargo publish
+rm -r target/
 
 cd ..
 cargo publish
