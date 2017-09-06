@@ -25,7 +25,7 @@ Require this crate (`endian_trait`) in your Cargo.toml, and the
 
 ```toml
 [dependencies]
-endian_trait = "0.2"
+endian_trait = "0.3"
 endian_trait_derive = "0.2"
 ```
 
@@ -126,3 +126,13 @@ On nightly, you can compile with `--features e128` to have Endian implemented on
 `i128` and `u128`.
 
 We really need type level integers.
+
+In your `Cargo.toml`, replace the original dependency on `endian_trait` with:
+
+```toml
+[dependencies.endian_trait]
+version = 0.3
+features = [
+    "arrays",
+]
+```
