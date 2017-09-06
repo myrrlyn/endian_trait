@@ -7,6 +7,11 @@ methods on the integral primitives, so `Endian::from_be(n: i32)` is equivalent
 to `::std::i32::from_be(n: i32)`
 !*/
 
+#![cfg_attr(
+	feature = "e128",
+	feature(i128_type)
+)]
+
 /// Convert a type from one endian order to another.
 ///
 /// The standard implementation of this trait is simply to call the methods on
@@ -144,3 +149,9 @@ implendian_f!(f32, f64);
 //  Auto-implement on the remaining integer primitives
 //  I'm a sucker for alphabetization.
 implendian!(u8, u16, u32, u64, usize);
+
+#[cfg(feature = "arrays")]
+pub mod arrays;
+
+#[cfg(feature = "e128")]
+implendian!(i128, u128);

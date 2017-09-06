@@ -16,7 +16,7 @@ stronger binary serialization procedures. Note that common transmission methods
 will also require implementing a conversion to/from byte arrays, which is beyond
 the scope of this library.
 
-# Usage
+## Usage
 
 **MINIMUM RUST VERSION: 1.20**
 
@@ -65,7 +65,7 @@ let q = Quux {
 let q2: Quux = q.from_be();
 ```
 
-## Useful ... Usage
+### Useful ... Usage
 
 Endian conversions destroy the utility, and in some cases (floats, chars) the
 validity, of the data on which they are performed. Once data is transformed
@@ -114,3 +114,15 @@ You could also move the endian conversions into the `From`/`Into` methods, but I
 personally prefer keeping those uncoupled.
 
 There's really no other reason to use this trait, as far as I'm aware.
+
+## Extra Features
+
+You can compile with `--features arrays` to have Endian implemented on slices of
+any `&mut [T: Endian]`, and on arrays `[T: Endian; N]` where N is in the
+range 0 ≤ N ≤ 256. That's right; I support eight times as many arrays as the
+standard library does.
+
+On nightly, you can compile with `--features e128` to have Endian implemented on
+`i128` and `u128`.
+
+We really need type level integers.
