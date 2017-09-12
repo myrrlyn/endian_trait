@@ -66,13 +66,12 @@ pub fn endian_trait(source: TokenStream) -> TokenStream {
 fn impl_endian(ast: &DeriveInput) -> Tokens {
 	let name = &ast.ident;
 	match ast.body {
-		//  TODO: Enum support
-		//  Enums can only be accepted if they are without data payloads and are
-		//  of known repr. I don't know how Rust chooses internal repr for enum
-		//  types, so this will have to reject any enums that are not carrying
-		//  a repr annotation. repr(C) is i32
 		Body::Enum(ref _variants) => {
-			unimplemented!("I have not yet learned enough `quote` to do this");
+			unimplemented!(r#"Enum are not integral types.
+
+If enums are present in a type that will be serialized in a way to require
+Endian transforms, then the enums in question must implement a conversion to and
+from an appropriate integral type, which will then perform the Endian actions."#);
 		},
 		//  Normal struct with named fields
 		Body::Struct(VariantData::Struct(ref fields)) => {
@@ -82,49 +81,16 @@ fn impl_endian(ast: &DeriveInput) -> Tokens {
 				Some(ref n) => n,
 				None => unreachable!("Struct fields MUST have idents"),
 			}).collect();
-			//  This is necessary to convince the macro system that we can bind
-			//  on the names twice in the loop without causing issues.
-			let (nl, nr) = (&names, &names);
-			quote! {
-impl Endian for #name {
-	fn from_be(self) -> Self { Self {
-		#( #nl: Endian::from_be(self.#nr), )*
-	} }
-	fn from_le(self) -> Self { Self {
-		#( #nl: Endian::from_le(self.#nr), )*
-	} }
-	fn to_be(self) -> Self { Self {
-		#( #nl: Endian::to_be(self.#nr), )*
-	} }
-	fn to_le(self) -> Self { Self {
-		#( #nl: Endian::to_le(self.#nr), )*
-	} }
-}
-			}
+			impl_on_idents(&name, names.as_slice())
 		},
 		Body::Struct(VariantData::Tuple(ref fields)) => {
 			//  Tuples don't have field names. For each field, get its index,
 			//  and convert from the raw number into an Ident.
-			//  This is necessary as usize serializes as VALusize, not VAL.
+			//  This is necessary as usize quotes as VALusize, not VAL.
 			let nums: Vec<Ident> = fields.iter()
 				.enumerate().map(|(n, _)| n.into()).collect();
-			let nums: &Vec<_> = &nums;
-			quote! {
-impl Endian for #name {
-	fn from_be(self) -> Self { #name(
-		#( Endian::from_be(self.#nums), )*
-	)}
-	fn from_le(self) -> Self { #name(
-		#( Endian::from_le(self.#nums), )*
-	)}
-	fn to_be(self) -> Self { #name(
-		#( Endian::to_be(self.#nums), )*
-	)}
-	fn to_le(self) -> Self { #name(
-		#( Endian::to_le(self.#nums), )*
-	)}
-}
-			}
+			let numr: Vec<&Ident> = nums.iter().collect();
+			impl_on_idents(name, numr.as_slice())
 		},
 		Body::Struct(VariantData::Unit) => {
 			quote! {
@@ -136,5 +102,25 @@ impl Endian for #name {
 }
 			}
 		},
+	}
+}
+
+fn impl_on_idents(n: &Ident, i: &[&Ident]) -> Tokens {
+	let (l, r) = (i, i);
+	quote! {
+impl Endian for #n {
+	fn from_be(self) -> Self { Self {
+		#( #l: Endian::from_be(self.#r), )*
+	} }
+	fn from_le(self) -> Self { Self {
+		#( #l: Endian::from_le(self.#r), )*
+	} }
+	fn to_be(self) -> Self { Self {
+		#( #l: Endian::to_be(self.#r), )*
+	} }
+	fn to_le(self) -> Self { Self {
+		#( #l: Endian::to_le(self.#r), )*
+	} }
+}
 	}
 }
