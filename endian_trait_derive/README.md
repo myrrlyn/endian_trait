@@ -1,6 +1,7 @@
 # Endian Trait Derivation
 
-This provides a custom derive for the Endian trait on structs.
+This provides a custom derive for the Endian trait on structs. It can operate on
+normal braced structs, tuple structs, and unit structs.
 
 It currently only works on structs. Enums are not yet supported; I plan to look
 into this before a 1.0 release.

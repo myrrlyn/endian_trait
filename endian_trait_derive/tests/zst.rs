@@ -23,10 +23,31 @@ use std::mem::size_of;
 #[derive(Clone, Copy, Debug, Endian, PartialEq, Eq)]
 struct Zst;
 
+#[derive(Clone, Copy, Debug, Endian, PartialEq, Eq)]
+struct ZsTuple();
+
+#[derive(Clone, Copy, Debug, Endian, PartialEq, Eq)]
+struct ComplexZeroType {
+	a: Zst,
+	b: ZsTuple,
+}
+
 #[test]
 fn zst() {
 	let z: Zst = Zst;
 	let z2: Zst = z.to_be();
 	assert_eq!(size_of::<Zst>(), 0);
-	assert_eq!(z, z2);
+	assert_eq!(z.to_le(), z2);
+
+	let zt: ZsTuple = ZsTuple();
+	let zt2: ZsTuple = zt.to_be();
+	assert_eq!(size_of::<ZsTuple>(), 0);
+	assert_eq!(zt.to_le(), zt2);
+
+	let czt: ComplexZeroType = ComplexZeroType {
+		a: z,
+		b: zt,
+	};
+	assert_eq!(size_of::<ComplexZeroType>(), 0);
+	assert_eq!(czt.to_be(), czt.to_le());
 }
