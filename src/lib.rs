@@ -7,10 +7,19 @@ methods on the integral primitives, so `Endian::from_be(n: i32)` is equivalent
 to `::std::i32::from_be(n: i32)`
 !*/
 
+#![deny(missing_docs)]
+
 #![cfg_attr(
 	feature = "e128",
 	feature(i128_type)
 )]
+
+//  Re-export the custom-derive so that users don't need two crates explicitly.
+#[allow(unused_attributes)]
+#[allow(unused_imports)]
+#[macro_export]
+#[macro_use]
+extern crate endian_trait_derive;
 
 /// Convert a type from one endian order to another.
 ///

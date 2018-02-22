@@ -15,6 +15,10 @@ exclude = [
 	"cargo-publish",
 ]
 
+[dependencies.endian_trait_derive]
+path = "endian_trait_derive"
+version = "0.3.0"
+
 [features]
 arrays = []
 e128 = []

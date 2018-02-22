@@ -1,5 +1,7 @@
 # Endian Trait
 
+[![Gitlab CI Status][build]][repo]
+
 This crate provides a trait, `Endian`, which requires four methods for
 converting primitives with multi-byte representations between big- and little-
 endian orders. In addition to declaring the trait, this library implements it on
@@ -20,21 +22,19 @@ the scope of this library.
 
 **MINIMUM RUST VERSION: 1.20**
 
-Require this crate (`endian_trait`) in your Cargo.toml, and the
-`endian_trait_derive` crate for access to the custom derive macro.
+Require this crate (`endian_trait`) in your Cargo.toml, and tag it with
+`#[macro_use]` for access to the custom derive macro.
 
 ```toml
 [dependencies]
-endian_trait = "0.3"
-endian_trait_derive = "0.2"
+endian_trait = "0.4"
 ```
 
 Import them in your crate root:
 
 ```rust
-extern crate endian_trait;
 #[macro_use]
-extern crate endian_trait_derive;
+extern crate endian_trait;
 ```
 
 and then use the `Endian` trait to flip bytes.
@@ -136,3 +136,6 @@ features = [
     "arrays",
 ]
 ```
+
+[build]: https://gitlab.com/myrrlyn/endian_trait/badges/master/build.svg
+[repo]: https://gitlab.com/myrrlyn/endian_trait
