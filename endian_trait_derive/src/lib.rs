@@ -23,6 +23,7 @@ This crate shouldn't be used directly; use
 ```rust,no-run
 #[macro_use]
 extern crate endian_trait;
+# fn main() {}
 ```
 
 and this crate will be pulled in transitively.
@@ -34,12 +35,20 @@ crate and `Endian` trait in scope.
 ```rust
 #[macro_use]
 extern crate endian_trait;
+# // This is needed because of the fact that the test is executed from within
+# // the context of the derive crate. The tests in the trait crate demonstrate
+# // that the macro is correctly re-exported.
+# #[macro_use]
+# extern crate endian_trait_derive;
+
+use endian_trait::Endian;
 
 #[derive(Endian)]
 struct Foo<A: Endian, B: Endian> {
     bar: A,
     baz: B,
 }
+# fn main() {}
 ```
 !*/
 
@@ -85,7 +94,49 @@ fn impl_endian(ast: DeriveInput) -> Tokens {
 	//  Get any generics from the struct
 	let generics: &Generics = &ast.generics;
 	match ast.data {
+		//  I apologize for the mess that is to come: syn's parser is very
+		//  informative and that means I have to do a lot of filtering to
+		//  establish that the incoming code is the very specific form of
+		//  correct with which I can work.
 		Data::Enum(ref _variants) => {
+			/*
+			//  First up, grab the attributes decorating the enum
+			let attrs: &Vec<Attribute> = &ast.attrs;
+			//  Find the attr that is #[repr(_)]. We need to build one for
+			//  comparison.
+			let repr_ident = Ident::new("repr");
+			//  Seek for a #[repr(_)] attribute
+			let repr: &MetaItem = &attrs.iter().find(|ref a| match &a.value {
+				&MetaItem::List(ref i, _) => i == &repr_ident,
+				_ => false
+			})
+			//  Unwrap, and panic if this returned None instead of Some, because
+			//  repr is the bare minimum of required attributes
+			.expect("Endian can only be derived on enums with #[repr()] attributes")
+			//  Take a reference to the actual value of the attribute, which is
+			//  "repr(_)" from the source.
+			.value;
+			//  Now figure out what the repr *is*.
+			//  The format is #[repr(Name)] where Name is one of: C, packed,
+			//  {i,u}{8,16,32,64}. This comes out to be a
+			//  List(Ident(repr), Vec<_>) in syn structures. We want the
+			//  one-element Vec's one element. Anything else is broken.
+			let repr_inner: &NestedMetaItem = match repr {
+				&MetaItem::List(_, ref inners) => {
+					if inners.len() != 1 {
+						panic!("Your #[repr()] attribute is invalid");
+					}
+					&inners[0]
+				},
+				_ => panic!("Your #[repr()] attribute is invalid"),
+			};
+			//  The interior is another meta-item, not a literal, because it's
+			//  not in quotes.
+			let repr_ty: &String = match repr_inner {
+				&NestedMetaItem::MetaItem(Lit::Str(ref repr_type, _)) => repr_type,
+				_ => panic!("Your #[repr()] attribute is invalid"),
+			};
+			*/
 			unimplemented!(r#"Enum are not integral types.
 
 If enums are present in a type that will be serialized in a way to require
