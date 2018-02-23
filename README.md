@@ -1,8 +1,8 @@
 # Endian Trait
 
-[![Gitlab CI Status][build]][repo]
-
-[![Travis CI Status][travis]][repo]
+[![Crate][crate_svg]][crate]
+[![Gitlab CI Status][gitlab_svg]][gitlab]
+[![Travis CI Status][travis_svg]][travis]
 
 This crate provides a trait, `Endian`, which requires four methods for
 converting primitives with multi-byte representations between big- and little-
@@ -139,6 +139,9 @@ features = [
 ]
 ```
 
-[build]: https://gitlab.com/myrrlyn/endian_trait/badges/master/build.svg
-[repo]: https://gitlab.com/myrrlyn/endian_trait
-[travis]: https://travis-ci.org/myrrlyn/endian_trait.svg?branch=master
+[crate]: https://crates.io/crates/endian_trait
+[crate_svg]: https://img.shields.io/crates/v/endian_trait.svg
+[gitlab]: https://gitlab.com/myrrlyn/endian_trait
+[gitlab_svg]: https://gitlab.com/myrrlyn/endian_trait/badges/master/build.svg
+[travis]: https://travis-ci.org/myrrlyn/endian_trait
+[travis_svg]: https://travis-ci.org/myrrlyn/endian_trait.svg?branch=master

@@ -27,3 +27,14 @@ e128 = []
 members = [
 	"endian_trait_derive",
 ]
+
+[badges.gitlab]
+repository = "myrrlyn/endian_trait"
+branch = "master"
+
+[badges.maintenance]
+status = "passively-maintained"
+
+[badges.travis-ci]
+repository = "myrrlyn/endian_trait"
+branch = "master"
