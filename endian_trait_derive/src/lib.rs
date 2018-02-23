@@ -1,4 +1,4 @@
-/*! Custom Derive for Endian Trait
+/*! Custom Derive for the Endian Trait
 
 This crate provides a custom-derive procedural macro for the Endian trait. This
 macro simply takes the component fields of the type on which it is annotated and
@@ -18,16 +18,22 @@ and consumer are the same Rust version.
 
 # Usage
 
-Import the crate and its macros. You can't make use of this crate without the
-`endian_trait` crate, and that's where fuller documentation can be found. You
-can then add a `#[derive(Endian)]` marker on structs (regular, tuple, or void).
-Enums are not yet supported. All elements of the struct must themselves be
-Endian.
+This crate shouldn't be used directly; use
 
-```rust,ignore
-extern crate endian_trait;
+```rust,no-run
 #[macro_use]
-extern crate endian_trait_derive;
+extern crate endian_trait;
+```
+
+and this crate will be pulled in transitively.
+
+By itself, this crate provides a custom-derive macro to emit a trait impl block
+that is syntactically valid but will fail to compile without the `endian_trait`
+crate and `Endian` trait in scope.
+
+```rust
+#[macro_use]
+extern crate endian_trait;
 
 #[derive(Endian)]
 struct Foo<A: Endian, B: Endian> {
@@ -43,27 +49,33 @@ extern crate syn;
 extern crate quote;
 
 use proc_macro::TokenStream;
-use quote::Tokens;
+use quote::{
+	Tokens,
+	ToTokens,
+};
 use syn::{
-	Body,
+	Data,
+	DataStruct,
 	DeriveInput,
+	Fields,
+	FieldsNamed,
+	FieldsUnnamed,
 	Generics,
 	Ident,
-	VariantData,
+	Index,
 };
 
 /// Hook for receiving `#[derive(Endian)]` code
 #[proc_macro_derive(Endian)]
 pub fn endian_trait(source: TokenStream) -> TokenStream {
-	let s = source.to_string();
 	//  A parse failure means that the input was invalid Rust. This is not our
 	//  problem, so a panic is permissible.
-	let ast = syn::parse_derive_input(&s).unwrap();
+	let ast = syn::parse(source).unwrap();
 	//  Take the parsed AST and pass it into the actual worker function.
 	let imp = impl_endian(ast);
 	//  The worker function will only ever generate valid Rust code, so this can
 	//  also be glibly unwrapped.
-	imp.parse().unwrap()
+	imp.into()
 }
 
 /// Code generator for Endian implementations
@@ -72,52 +84,61 @@ fn impl_endian(ast: DeriveInput) -> Tokens {
 	let name: &Ident = &ast.ident;
 	//  Get any generics from the struct
 	let generics: &Generics = &ast.generics;
-	match ast.body {
-		Body::Enum(ref _variants) => {
+	match ast.data {
+		Data::Enum(ref _variants) => {
 			unimplemented!(r#"Enum are not integral types.
 
 If enums are present in a type that will be serialized in a way to require
 Endian transforms, then the enums in question must implement a conversion to and
 from an appropriate integral type, which will then perform the Endian actions."#);
 		},
-		//  Normal struct with named fields
-		Body::Struct(VariantData::Struct(ref fields)) => {
-			//  Collect all the names. This should be infallible, hence the
-			//  unreachable! in the None branch.
-			let names: Vec<_> = fields.iter().map(|f| match f.ident {
-				Some(ref n) => n,
-				None => unreachable!("Struct fields MUST have idents"),
-			}).collect();
-			codegen(name, generics, names.as_slice())
+		Data::Struct(DataStruct { ref fields, .. }) =>  match *fields {
+			//  Normal struct: named fields
+			Fields::Named(FieldsNamed { ref named, .. }) => {
+				//  Collect references to all the field names. A precondition of
+				//  reaching this code path is that all fields HAVE names, so it
+				//  is safe to have an unreachable trap in the None condition.
+				let names: Vec<&Ident> = named.iter().map(|f| match f.ident {
+					Some(ref n) => n,
+					None => unreachable!("All fields in a struct must be named"),
+				}).collect();
+				codegen(name, generics, &names[..])
+			},
+			//  Tuple struct: unnamed fields
+			Fields::Unnamed(FieldsUnnamed { ref unnamed, .. }) => {
+				let nums: Vec<Index> = (0 .. unnamed.len()).map(|n| n.into())
+					.collect();
+				codegen(name, generics, &nums[..])
+			},
+			//  Unit struct: no fields
+			//  This is simple: all Endian functions are just the identity
+			//  function. Note that Unit structs are a subset of zero-sized
+			//  types: specifically, unit has zero fields, while ZST is the set
+			//  of all structs with zero or more fields which are all of zero
+			//  size. Unit structs are specifically:
+			//
+			//  - ()
+			//  - struct Foo;
+			//  - struct Foo();
+			//  - struct Foo{};
+			//
+			//  All ZST types eventually bottom out here; the interim can be
+			//  handled by the other branches.
+			Fields::Unit => {
+				//  RFC #1506 (stabilized in 1.19) permits unit structs to be
+				//  declared as `Foo {}`. This allows for a deduplication of the
+				//  code generation path: the codegen function emits
+				//
+				//  fn func(self) -> Self { Self { /* fields */ } }
+				//
+				//  which, when fields is empty, leaves `Self { }` as the output
+				//  token. Since this is legal, there is no special case for
+				//  handling empty field sets.
+				codegen::<Index>(name, generics, &[])
+			},
 		},
-		//  Tuple struct with unnamed fields
-		Body::Struct(VariantData::Tuple(ref fields)) => {
-			//  Tuples don't have field names. For each field, get its index,
-			//  and convert from the raw number into an Ident.
-			//  This is necessary as usize quotes as VALusize, not VAL.
-			let nums: Vec<Ident> = (0 .. fields.len()).map(|n| n.into()).collect();
-			//  Get a collection of references to each Ident for the implementor
-			let numr: Vec<&Ident> = nums.iter().collect();
-			//  Tuple structs are able to use Name { 0: val, ... } since 1.19
-			//  See RFC #1506
-			codegen(name, generics, numr.as_slice())
-		},
-		//  Unit struct: no fields
-		//  This is simple: All Endian functions are just the identity function.
-		//  Note that Unit is a special subset of ZST: Unit has no fields at all
-		//  while ZST can be any tuple or struct such that all its fields are
-		//  zero sized. Unit is specifically `()` or `struct Name;` or
-		//  `struct Name();`
-		//  All ZST structs or tuples have fields which eventually bottom out
-		//  here; their construction can be handled by the Struct and Enum arms.
-		Body::Struct(VariantData::Unit) => {
-			//  Also in RFC #1506 (implemented 1.19), unit structs can be
-			//  declared as Name{}. Coincidentally, Name{} is also what will be
-			//  emitted by the codegen function when given an empty list of
-			//  fields.
-			//  Call codegen on the name and generics (which for Unit will be
-			//  empty) and an empty array.
-			codegen(name, generics, &[])
+		Data::Union(_) => {
+			unimplemented!("I don't know how to use unions yet");
 		},
 	}
 }
@@ -129,7 +150,7 @@ from an appropriate integral type, which will then perform the Endian actions."#
 ///
 /// Thanks to RFC #1506 (stabilized in 1.19), this can be a single code path for
 /// all three types of struct definition: standard, tuple, and unit.
-fn codegen(name: &Ident, generics: &Generics, fields: &[&Ident]) -> Tokens {
+fn codegen<T: ToTokens>(name: &Ident, generics: &Generics, fields: &[T]) -> Tokens {
 	//  We need left and right access to each name so that the stepper can draw
 	//  from each once, rather than advancing the name iterator twice per step.
 	//  Without this, the stepper would have incorrect behavior consuming the

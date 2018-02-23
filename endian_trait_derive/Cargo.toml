@@ -1,6 +1,6 @@
 [package]
 name = "endian_trait_derive"
-version = "0.3.0"
+version = "0.3.1"
 authors = [
 	"myrrlyn <myrrlyn@outlook.com>",
 ]
@@ -18,5 +18,21 @@ workspace = ".."
 proc-macro = true
 
 [dependencies]
-quote = "0.3"
-syn = "0.11"
+quote = "0.4"
+
+[dependencies.syn]
+version = "0.12"
+features = [
+	"derive",
+]
+
+[badges.gitlab]
+repository = "myrrlyn/endian_trait"
+branch = "master"
+
+[badges.maintenance]
+status = "passively-maintained"
+
+[badges.travis-ci]
+repository = "myrrlyn/endian_trait"
+branch = "master"
