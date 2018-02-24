@@ -63,6 +63,7 @@ use quote::{
 	ToTokens,
 };
 use syn::{
+	Attribute,
 	Data,
 	DataStruct,
 	DeriveInput,
@@ -72,6 +73,10 @@ use syn::{
 	Generics,
 	Ident,
 	Index,
+	Meta,
+	MetaList,
+	NestedMeta,
+	Path,
 };
 
 /// Hook for receiving `#[derive(Endian)]` code
@@ -99,49 +104,68 @@ fn impl_endian(ast: DeriveInput) -> Tokens {
 		//  establish that the incoming code is the very specific form of
 		//  correct with which I can work.
 		Data::Enum(ref _variants) => {
-			/*
 			//  First up, grab the attributes decorating the enum
-			let attrs: &Vec<Attribute> = &ast.attrs;
+			let attrs: &[Attribute] = &ast.attrs;
 			//  Find the attr that is #[repr(_)]. We need to build one for
 			//  comparison.
-			let repr_ident = Ident::new("repr");
+			let repr_path: Path = Ident::from("repr").into();
 			//  Seek for a #[repr(_)] attribute
-			let repr: &MetaItem = &attrs.iter().find(|ref a| match &a.value {
-				&MetaItem::List(ref i, _) => i == &repr_ident,
-				_ => false
+			let repr: &Meta = &attrs.iter().find(|ref a| {
+				let a: &Path = &a.path;
+				let r: &Path = &repr_path;
+				a == r
 			})
 			//  Unwrap, and panic if this returned None instead of Some, because
 			//  repr is the bare minimum of required attributes
 			.expect("Endian can only be derived on enums with #[repr()] attributes")
 			//  Take a reference to the actual value of the attribute, which is
 			//  "repr(_)" from the source.
-			.value;
+			.interpret_meta()
+			.expect("#[repr(_)] cannot fail to be interpreted");
 			//  Now figure out what the repr *is*.
-			//  The format is #[repr(Name)] where Name is one of: C, packed,
+			//  The format is #[repr(Name)] where Name is one of
 			//  {i,u}{8,16,32,64}. This comes out to be a
 			//  List(Ident(repr), Vec<_>) in syn structures. We want the
 			//  one-element Vec's one element. Anything else is broken.
-			let repr_inner: &NestedMetaItem = match repr {
-				&MetaItem::List(_, ref inners) => {
-					if inners.len() != 1 {
-						panic!("Your #[repr()] attribute is invalid");
+			let kind: &Ident = match *repr {
+				Meta::List(MetaList { ref nested, .. }) => {
+					if nested.len() != 1 {
+						panic!("The #[repr()] attribute must have one item inside it");
 					}
-					&inners[0]
+					match nested[0] {
+						NestedMeta::Meta(Meta::Word(ref ty)) => ty,
+						_ => panic!("The #[repr()] interior must not be a literal token"),
+					}
 				},
-				_ => panic!("Your #[repr()] attribute is invalid"),
+				_ => unreachable!("The #[repr()] attribute can only be Meta::List"),
 			};
-			//  The interior is another meta-item, not a literal, because it's
-			//  not in quotes.
-			let repr_ty: &String = match repr_inner {
-				&NestedMetaItem::MetaItem(Lit::Str(ref repr_type, _)) => repr_type,
-				_ => panic!("Your #[repr()] attribute is invalid"),
-			};
-			*/
-			unimplemented!(r#"Enum are not integral types.
-
-If enums are present in a type that will be serialized in a way to require
-Endian transforms, then the enums in question must implement a conversion to and
-from an appropriate integral type, which will then perform the Endian actions."#);
+			if kind == &Ident::from("C") {
+				panic!("#[repr(C)] enums cannot implement Endian");
+			}
+			quote! {
+				impl Endian for #name {
+					fn from_be(self) -> Self { unsafe {
+						use std::mem::transmute;
+						let raw: #kind = transmute(self);
+						transmute(raw.from_be())
+					} }
+					fn from_le(self) -> Self { unsafe {
+						use std::mem::transmute;
+						let raw: #kind = transmute(self);
+						transmute(raw.from_le())
+					} }
+					fn to_be(self) -> Self { unsafe {
+						use std::mem::transmute;
+						let raw: #kind = transmute(self);
+						transmute(raw.to_be())
+					} }
+					fn to_le(self) -> Self { unsafe {
+						use std::mem::transmute;
+						let raw: #kind = transmute(self);
+						transmute(raw.to_le())
+					} }
+				}
+			}
 		},
 		Data::Struct(DataStruct { ref fields, .. }) =>  match *fields {
 			//  Normal struct: named fields

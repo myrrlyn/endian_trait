@@ -24,6 +24,7 @@ quote = "0.4"
 version = "0.12"
 features = [
 	"derive",
+	"extra-traits",
 ]
 
 [dev-dependencies]
