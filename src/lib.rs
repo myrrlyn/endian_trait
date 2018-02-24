@@ -20,6 +20,13 @@ to `::std::i32::from_be(n: i32)`
 extern crate endian_trait_derive;
 pub use endian_trait_derive::*;
 
+use std::mem::{
+	size_of,
+	transmute,
+};
+use std::ptr;
+use std::slice;
+
 /// Convert a type from one endian order to another.
 ///
 /// The standard implementation of this trait is simply to call the methods on
@@ -45,6 +52,41 @@ pub trait Endian {
 	///
 	/// On little-endian platforms, this is a no-op and should be compiled out.
 	fn from_le(self) -> Self;
+}
+
+/// Convert a type from one endian order to another, and then transmute it to an
+/// array of bytes.
+pub unsafe trait EndianBytes: Copy + Endian + Sized {
+	/// Convert a run of big-endian bytes to a host ordered structure, in place.
+	unsafe fn from_be_bytes(bytes: &mut [u8]) -> &mut Self {
+		assert!(bytes.len() == size_of::<Self>());
+		let out: &mut Self = transmute(bytes.as_mut_ptr());
+		ptr::write(out, ptr::read(out).from_be());
+		out
+	}
+
+	/// Convert a run of little-endian bytes to a host ordered structure, in
+	/// place.
+	unsafe fn from_le_bytes(bytes: &mut [u8]) -> &mut Self {
+		assert!(bytes.len() == size_of::<Self>());
+		let out: &mut Self = transmute(bytes.as_mut_ptr());
+		ptr::write(out, ptr::read(out).from_le());
+		out
+	}
+
+	/// Convert a structure from host endian to big-endian order, in place, then
+	/// refer to it as a slice of bytes.
+	unsafe fn to_be_bytes(&mut self) -> &mut [u8] {
+		ptr::write(self, ptr::read(self).to_be());
+		slice::from_raw_parts_mut(self as *mut Self as *mut u8, size_of::<Self>())
+	}
+
+	/// Convert a structure from host endian to little-endian order, in place,
+	/// then refer to it as a slice of bytes.
+	unsafe fn to_le_bytes(&mut self) -> &[u8] {
+		ptr::write(self, ptr::read(self).to_le());
+		slice::from_raw_parts_mut(self as *mut Self as *mut u8, size_of::<Self>())
+	}
 }
 
 /// Implementing Endian on the integer primitives just means delegating to their
@@ -173,3 +215,5 @@ implendian_f!(f32, f64);
 
 #[cfg(feature = "arrays")]
 pub mod arrays;
+
+unsafe impl<T: Copy + Endian + Sized> EndianBytes for T {}
