@@ -28,7 +28,7 @@ features = [
 ]
 
 [dev-dependencies]
-endian_trait = "0.3"
+endian_trait = "0.4"
 
 [badges.gitlab]
 repository = "myrrlyn/endian_trait"

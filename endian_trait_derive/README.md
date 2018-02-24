@@ -15,7 +15,7 @@ This crate cannot be used standalone. Its derive macro is re-exported by the
 
 ```toml
 [dependencies]
-endian_trait = "0.3"
+endian_trait = "0.4"
 ```
 
 ```rust

@@ -128,7 +128,7 @@ In your `Cargo.toml`, replace the original dependency on `endian_trait` with:
 
 ```toml
 [dependencies.endian_trait]
-version = 0.3
+version = 0.4
 features = [
     "arrays",
 ]
