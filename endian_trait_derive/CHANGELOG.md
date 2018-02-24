@@ -2,6 +2,31 @@
 
 List of notable changes to the custom-derive macro for the `Endian` trait.
 
+## 0.4.0
+
+### Added
+
+- Derive macro now supports bare enums with integer representation.
+
+    The Endian trait can only be derived on enums that are tagged with one
+    `#[repr()]` attribute, and that attribute must be one of the integer
+    primitive types. Any other repr value, or a missing repr, or multiple, will
+    cause a failure.
+
+    Attempting to derive Endian on a bodied enum, such as
+
+    ```rust
+    #[repr(i32)]
+    #[derive(Endian)]
+    enum Bodied {
+        A(i32)
+    }
+    ```
+
+    will abort with an error about a mismatched transmute call.
+
+    TODO: Refine that error message.
+
 ## 0.3.2
 
 ### Added
