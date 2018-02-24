@@ -53,9 +53,9 @@ struct Foo<A: Endian, B: Endian> {
 !*/
 
 extern crate proc_macro;
-extern crate syn;
 #[macro_use]
 extern crate quote;
+extern crate syn;
 
 use proc_macro::TokenStream;
 use quote::{
@@ -99,74 +99,8 @@ fn impl_endian(ast: DeriveInput) -> Tokens {
 	//  Get any generics from the struct
 	let generics: &Generics = &ast.generics;
 	match ast.data {
-		//  I apologize for the mess that is to come: syn's parser is very
-		//  informative and that means I have to do a lot of filtering to
-		//  establish that the incoming code is the very specific form of
-		//  correct with which I can work.
-		Data::Enum(ref _variants) => {
-			//  First up, grab the attributes decorating the enum
-			let attrs: &[Attribute] = &ast.attrs;
-			//  Find the attr that is #[repr(_)]. We need to build one for
-			//  comparison.
-			let repr_path: Path = Ident::from("repr").into();
-			//  Seek for a #[repr(_)] attribute
-			let repr: &Meta = &attrs.iter().find(|ref a| {
-				let a: &Path = &a.path;
-				let r: &Path = &repr_path;
-				a == r
-			})
-			//  Unwrap, and panic if this returned None instead of Some, because
-			//  repr is the bare minimum of required attributes
-			.expect("Endian can only be derived on enums with #[repr()] attributes")
-			//  Take a reference to the actual value of the attribute, which is
-			//  "repr(_)" from the source.
-			.interpret_meta()
-			.expect("#[repr(_)] cannot fail to be interpreted");
-			//  Now figure out what the repr *is*.
-			//  The format is #[repr(Name)] where Name is one of
-			//  {i,u}{8,16,32,64}. This comes out to be a
-			//  List(Ident(repr), Vec<_>) in syn structures. We want the
-			//  one-element Vec's one element. Anything else is broken.
-			let kind: &Ident = match *repr {
-				Meta::List(MetaList { ref nested, .. }) => {
-					if nested.len() != 1 {
-						panic!("The #[repr()] attribute must have one item inside it");
-					}
-					match nested[0] {
-						NestedMeta::Meta(Meta::Word(ref ty)) => ty,
-						_ => panic!("The #[repr()] interior must not be a literal token"),
-					}
-				},
-				_ => unreachable!("The #[repr()] attribute can only be Meta::List"),
-			};
-			if kind == &Ident::from("C") {
-				panic!("#[repr(C)] enums cannot implement Endian");
-			}
-			quote! {
-				impl Endian for #name {
-					fn from_be(self) -> Self { unsafe {
-						use std::mem::transmute;
-						let raw: #kind = transmute(self);
-						transmute(raw.from_be())
-					} }
-					fn from_le(self) -> Self { unsafe {
-						use std::mem::transmute;
-						let raw: #kind = transmute(self);
-						transmute(raw.from_le())
-					} }
-					fn to_be(self) -> Self { unsafe {
-						use std::mem::transmute;
-						let raw: #kind = transmute(self);
-						transmute(raw.to_be())
-					} }
-					fn to_le(self) -> Self { unsafe {
-						use std::mem::transmute;
-						let raw: #kind = transmute(self);
-						transmute(raw.to_le())
-					} }
-				}
-			}
-		},
+		//  Attempt to derive Endian for an integer-repr enum
+		Data::Enum(ref _variants) => codegen_enum(name, &ast.attrs),
 		Data::Struct(DataStruct { ref fields, .. }) =>  match *fields {
 			//  Normal struct: named fields
 			Fields::Named(FieldsNamed { ref named, .. }) => {
@@ -177,13 +111,13 @@ fn impl_endian(ast: DeriveInput) -> Tokens {
 					Some(ref n) => n,
 					None => unreachable!("All fields in a struct must be named"),
 				}).collect();
-				codegen(name, generics, &names[..])
+				codegen_struct(name, generics, &names[..])
 			},
 			//  Tuple struct: unnamed fields
 			Fields::Unnamed(FieldsUnnamed { ref unnamed, .. }) => {
 				let nums: Vec<Index> = (0 .. unnamed.len()).map(|n| n.into())
 					.collect();
-				codegen(name, generics, &nums[..])
+				codegen_struct(name, generics, &nums[..])
 			},
 			//  Unit struct: no fields
 			//  This is simple: all Endian functions are just the identity
@@ -199,22 +133,79 @@ fn impl_endian(ast: DeriveInput) -> Tokens {
 			//
 			//  All ZST types eventually bottom out here; the interim can be
 			//  handled by the other branches.
-			Fields::Unit => {
-				//  RFC #1506 (stabilized in 1.19) permits unit structs to be
-				//  declared as `Foo {}`. This allows for a deduplication of the
-				//  code generation path: the codegen function emits
-				//
-				//  fn func(self) -> Self { Self { /* fields */ } }
-				//
-				//  which, when fields is empty, leaves `Self { }` as the output
-				//  token. Since this is legal, there is no special case for
-				//  handling empty field sets.
-				codegen::<Index>(name, generics, &[])
-			},
+			//
+			//  RFC #1506 (stabilized in 1.19) permits unit structs to be
+			//  declared as `Foo {}`. This allows for a deduplication of the
+			//  code generation path: the codegen function emits
+			//
+			//  fn func(self) -> Self { Self { /* fields */ } }
+			//
+			//  which, when fields is empty, leaves `Self { }` as the output
+			//  token. Since this is legal, there is no special case for
+			//  handling empty field sets.
+			Fields::Unit => codegen_struct::<Index>(name, generics, &[]),
 		},
 		Data::Union(_) => {
-			unimplemented!("I don't know how to use unions yet");
+			unimplemented!("Proc-macro derives are not yet allowed on unions");
 		},
+	}
+}
+
+/// Generate the Endian impl for an enum with an integer repr and no data body.
+fn codegen_enum(name: &Ident, attrs: &[Attribute]) -> Tokens {
+	//  Find the attr that is #[repr(_)]. We need to build one for comparison.
+	let repr_path: Path = Ident::from("repr").into();
+	//  Seek for a #[repr(_)] attribute
+	let repr: &Meta = &attrs.iter().find(|ref a| &a.path == &repr_path)
+	//  Unwrap, and panic if this returned None instead of Some, because repr is
+	//  the bare minimum of required attributes
+	.expect("Endian can only be derived on enums with #[repr()] attributes")
+	//  Take a reference to the actual value of the attribute, which is
+	//  "repr(_)" from the source.
+	.interpret_meta()
+	.expect("#[repr(_)] cannot fail to be interpreted");
+	//  Now figure out what the repr *is*. The format is #[repr(Name)] where
+	//  Name is one of {i,u}{8,16,32,64}. This comes out to be a
+	//  List(MetaList(Vec<Meta>, ..)) in syn structures. We want the one-element
+	//  Vec's one element. Anything else is broken.
+	let kind: &Ident = match *repr {
+		Meta::List(MetaList { ref nested, .. }) => {
+			if nested.len() != 1 {
+				panic!("The #[repr()] attribute must have one item inside it");
+			}
+			match nested[0] {
+				NestedMeta::Meta(Meta::Word(ref ty)) => ty,
+				_ => panic!("The #[repr()] interior must not be a literal token"),
+			}
+		},
+		_ => unreachable!("The #[repr()] attribute can only be Meta::List"),
+	};
+	if kind == &Ident::from("C") {
+		panic!("#[repr(C)] enums cannot implement Endian");
+	}
+	quote! {
+		impl Endian for #name {
+			fn from_be(self) -> Self { unsafe {
+				use std::mem::transmute;
+				let raw: #kind = transmute(self);
+				transmute(raw.from_be())
+			} }
+			fn from_le(self) -> Self { unsafe {
+				use std::mem::transmute;
+				let raw: #kind = transmute(self);
+				transmute(raw.from_le())
+			} }
+			fn to_be(self) -> Self { unsafe {
+				use std::mem::transmute;
+				let raw: #kind = transmute(self);
+				transmute(raw.to_be())
+			} }
+			fn to_le(self) -> Self { unsafe {
+				use std::mem::transmute;
+				let raw: #kind = transmute(self);
+				transmute(raw.to_le())
+			} }
+		}
 	}
 }
 
@@ -225,7 +216,7 @@ fn impl_endian(ast: DeriveInput) -> Tokens {
 ///
 /// Thanks to RFC #1506 (stabilized in 1.19), this can be a single code path for
 /// all three types of struct definition: standard, tuple, and unit.
-fn codegen<T: ToTokens>(name: &Ident, generics: &Generics, fields: &[T]) -> Tokens {
+fn codegen_struct<T: ToTokens>(name: &Ident, generics: &Generics, fields: &[T]) -> Tokens {
 	//  We need left and right access to each name so that the stepper can draw
 	//  from each once, rather than advancing the name iterator twice per step.
 	//  Without this, the stepper would have incorrect behavior consuming the
