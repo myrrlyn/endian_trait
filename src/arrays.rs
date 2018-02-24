@@ -32,24 +32,28 @@ use std::ptr;
 /// bitwise memory repr of the instance.
 macro_rules! flip_collection {
 	() => {
+		#[allow(unused_mut)]
 		fn from_be(mut self) -> Self {
 			for el in self.iter_mut() { unsafe {
 				ptr::write(el, ptr::read(el).from_be());
 			} }
 			self
 		}
+		#[allow(unused_mut)]
 		fn from_le(mut self) -> Self {
 			for el in self.iter_mut() { unsafe {
 				ptr::write(el, ptr::read(el).from_le());
 			} }
 			self
 		}
+		#[allow(unused_mut)]
 		fn to_be(mut self) -> Self {
 			for el in self.iter_mut() { unsafe {
 				ptr::write(el, ptr::read(el).to_be());
 			} }
 			self
 		}
+		#[allow(unused_mut)]
 		fn to_le(mut self) -> Self {
 			for el in self.iter_mut() { unsafe {
 				ptr::write(el, ptr::read(el).to_le());
@@ -58,6 +62,7 @@ macro_rules! flip_collection {
 		}
 	};
 }
+
 //  Implement across any slice
 impl<'a, T> Endian for &'a mut [T] where T: Endian {
 	flip_collection!();
@@ -101,12 +106,11 @@ mod tests {
 		let src = [
 			1, 2, 3, 4, 5, 6, 7, 8,
 		];
-		let mut flip = src.clone();
+		let flip = src.clone();
 		let mut comp = src.clone();
 
 		//  Flip one slice via the Endian trait method
-		let rflip: &mut [i32] = &mut flip;
-		rflip.to_be();
+		let rflip: &[i32] = &flip.to_be();
 		//  Flip the other by looping over it and using the inherent method
 		for e in comp.iter_mut() {
 			*e = e.to_be();

@@ -14,9 +14,8 @@ struct ExampleGeneric<A> where A: Endian {
 So long as this bound is satisfied, Endian can be derived on any generic struct.
 !*/
 
-extern crate endian_trait;
 #[macro_use]
-extern crate endian_trait_derive;
+extern crate endian_trait;
 
 use endian_trait::Endian;
 

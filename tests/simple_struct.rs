@@ -1,9 +1,8 @@
 /*! Test Endian derivation on normal structs composed of primitives
 !*/
 
-extern crate endian_trait;
 #[macro_use]
-extern crate endian_trait_derive;
+extern crate endian_trait;
 
 use endian_trait::Endian;
 use std::mem::{

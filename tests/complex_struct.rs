@@ -5,9 +5,8 @@ merely UB to transmute them into byte arrays and access into them like that,
 which is what all the other tests are doing.
 !*/
 
-extern crate endian_trait;
 #[macro_use]
-extern crate endian_trait_derive;
+extern crate endian_trait;
 
 use endian_trait::Endian;
 

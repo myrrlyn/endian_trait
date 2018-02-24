@@ -7,11 +7,9 @@
 This crate provides a trait, `Endian`, which requires four methods for
 converting primitives with multi-byte representations between big- and little-
 endian orders. In addition to declaring the trait, this library implements it on
-Rust's primitives (`bool`, `char`, `{i,u}{8,16,32,64,size}`, `f32`, and `f64`).
+Rust's primitives (`bool`, `char`, `{i,u}{8,16,32,64}`, `f32`, and `f64`).
 
-An associated crate, `endian_trait_derive`, provides a custom-derive macro that
-will implement `Endian` for complex types that are composed of inner types which
-are themselves `Endian`.
+This crate also provides a custom derive macro available with `#[macro_use]`.
 
 The primary purpose of this library is to aid in the direct binary serialization
 of Rust types across machine boundaries. This is not a robust means of moving
@@ -75,9 +73,6 @@ away from local endian, it can no longer be used as anything but a bare sequence
 of bytes with no further meaning. Similarly, the transformations from an order
 to local endian are only useful to perform on a sequence of bytes that are known
 to be in the right shape.
-
-This trait is thus only useful when coupled with binary serialization methods
-such as `Into<[u8; N]>` and `From<[u8; N]>`.
 
 In my projects that use this, I have the following workflow for binary ser/des:
 

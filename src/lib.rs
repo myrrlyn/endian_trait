@@ -15,11 +15,10 @@ to `::std::i32::from_be(n: i32)`
 )]
 
 //  Re-export the custom-derive so that users don't need two crates explicitly.
-#[allow(unused_attributes)]
 #[allow(unused_imports)]
-#[macro_export]
 #[macro_use]
 extern crate endian_trait_derive;
+pub use endian_trait_derive::*;
 
 /// Convert a type from one endian order to another.
 ///
@@ -31,15 +30,18 @@ pub trait Endian {
 	///
 	/// On big-endian platforms, this is a no-op and should be compiled out.
 	fn to_be(self) -> Self;
+
 	/// Converts from host endian to little-endian order.
 	///
 	/// On little-endian platforms, this is a no-op and should be compiled out.
 	fn to_le(self) -> Self;
+
 	/// Converts from big-endian order to host endian.
 	///
 	/// On big-endian platforms, this is a no-op and should be compiled out.
 	fn from_be(self) -> Self;
-	/// Converts form little-endian order to host endian.
+
+	/// Converts from little-endian order to host endian.
 	///
 	/// On little-endian platforms, this is a no-op and should be compiled out.
 	fn from_le(self) -> Self;
@@ -66,12 +68,18 @@ macro_rules! implendian {
 		}
 	)* };
 }
-/// Implement Endian on the floats by flipping their byte repr
+
+/// Implement Endian on the floats by flipping their byte repr.
 ///
 /// The to_ conversions use bare transmute, as the result may wind up looking
 /// invalid on the host architecture when used in floating-point contexts. The
 /// from_ conversions use Rust's from_bits functions, as the final result must
 /// be a valid local floating-point number.
+///
+/// The to/from _bits() APIs on f32/64 were stabilized in Rust 1.20, and thus
+/// this code cannot be run on Rust version below that.
+//  TODO: Figure out how to isolate this so that older Rust versions can use the
+//  crate?
 macro_rules! implendian_f {
 	( $( $t:tt ),* ) => { $(
 		impl Endian for $t {
@@ -82,16 +90,16 @@ macro_rules! implendian_f {
 				Self::from_bits(self.to_bits().from_le())
 			}
 			fn to_be(self) -> Self {
-				unsafe { ::std::mem::transmute(self.to_bits().to_be()) }
+				Self::from_bits(self.to_bits().to_be())
 			}
 			fn to_le(self) -> Self {
-				unsafe { ::std::mem::transmute(self.to_bits().to_le()) }
+				Self::from_bits(self.to_bits().to_le())
 			}
 		}
 	)* };
 }
 
-/// Implement on `bool`
+/// Implement on `bool`.
 ///
 /// `bool` is always one byte, and single bytes don`t have endian order.
 impl Endian for bool {
@@ -101,7 +109,7 @@ impl Endian for bool {
 	fn to_le(self) -> Self { self }
 }
 
-/// Implement on `char`
+/// Implement on `char`.
 ///
 /// `char` is four bytes wide. Delegate to `u32`'s implementation and transmute.
 /// This is safe ONLY IF THE CONVERSION MAKES LOGICAL SENSE
@@ -122,6 +130,7 @@ impl Endian for char {
 		}
 		unsafe { ::std::mem::transmute(flip) }
 	}
+
 	/// Attempts to create a local `char` from a little-endian value.
 	///
 	/// This function WILL panic if the local value exceeds the maximum Unicode
@@ -133,6 +142,7 @@ impl Endian for char {
 		}
 		unsafe { ::std::mem::transmute(flip) }
 	}
+
 	/// Converts a local `char` to big-endian.
 	///
 	/// This may result in a byte value that is not a valid Unicode Scalar Value
@@ -141,6 +151,7 @@ impl Endian for char {
 	fn to_be(self) -> Self {
 		unsafe { ::std::mem::transmute((self as u32).to_be()) }
 	}
+
 	/// Converts a local `char` to little-endian.
 	///
 	/// This may result in a byte value that is not a valid Unicode Scalar Value
@@ -151,16 +162,14 @@ impl Endian for char {
 	}
 }
 
-//  Auto-implement on the integer primitives
-implendian!(i8, i16, i32, i64, isize);
-//  Auto-implement on floats
-implendian_f!(f32, f64);
-//  Auto-implement on the remaining integer primitives
-//  I'm a sucker for alphabetization.
-implendian!(u8, u16, u32, u64, usize);
-
-#[cfg(feature = "arrays")]
-pub mod arrays;
+//  Implement on the integer primitives
+implendian!(i8, u8, i16, u16, i32, u32, i64, u64);
 
 #[cfg(feature = "e128")]
 implendian!(i128, u128);
+
+//  Implement on floats
+implendian_f!(f32, f64);
+
+#[cfg(feature = "arrays")]
+pub mod arrays;
