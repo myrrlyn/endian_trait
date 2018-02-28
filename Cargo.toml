@@ -12,7 +12,7 @@ keywords = [
 ]
 repository = "https://gitlab.com/myrrlyn/endian_trait"
 exclude = [
-	"cargo-publish",
+	"Justfile",
 ]
 
 [dependencies.endian_trait_derive]

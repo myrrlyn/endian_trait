@@ -13,6 +13,9 @@ keywords = [
 readme = "README.md"
 repository = "https://gitlab.com/myrrlyn/endian_trait"
 workspace = ".."
+exclude = [
+	"Justfile",
+]
 
 [lib]
 proc-macro = true

@@ -1,0 +1,13 @@
+build:
+	cargo check
+	cargo build
+
+doc: test
+	cargo doc
+
+publish: doc
+	cargo publish
+	rm -r target/
+
+test: build
+	cargo test
