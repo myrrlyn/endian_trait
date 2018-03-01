@@ -20,7 +20,7 @@ and consumer are the same Rust version.
 
 This crate shouldn't be used directly; use
 
-```rust,no-run
+```rust,ignore
 #[macro_use]
 extern crate endian_trait;
 # fn main() {}
@@ -32,7 +32,7 @@ By itself, this crate provides a custom-derive macro to emit a trait impl block
 that is syntactically valid but will fail to compile without the `endian_trait`
 crate and `Endian` trait in scope.
 
-```rust
+```rust,ignore
 #[macro_use]
 extern crate endian_trait;
 # // This is needed because of the fact that the test is executed from within

@@ -30,10 +30,6 @@ features = [
 	"extra-traits",
 ]
 
-[dev-dependencies.endian_trait]
-path = ".."
-version = "0.5"
-
 [badges.gitlab]
 repository = "myrrlyn/endian_trait"
 branch = "master"

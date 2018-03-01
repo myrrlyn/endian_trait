@@ -2,12 +2,6 @@ build:
 	cargo check
 	cargo build
 
-doc: test
-	cargo doc
-
-publish: doc
+publish: build
 	cargo publish
 	rm -r target/
-
-test: build
-	cargo test
