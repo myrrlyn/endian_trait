@@ -76,7 +76,6 @@ use syn::{
 	Meta,
 	MetaList,
 	NestedMeta,
-	Path,
 };
 
 /// Hook for receiving `#[derive(Endian)]` code
@@ -85,11 +84,9 @@ pub fn endian_trait(source: TokenStream) -> TokenStream {
 	//  A parse failure means that the input was invalid Rust. This is not our
 	//  problem, so a panic is permissible.
 	let ast = syn::parse(source).unwrap();
-	//  Take the parsed AST and pass it into the actual worker function.
-	let imp = impl_endian(ast);
-	//  The worker function will only ever generate valid Rust code, so this can
-	//  also be glibly unwrapped.
-	imp.into()
+	//  Take the parsed AST and pass it into the actual worker function, then
+	//  convert the results back into Rust tokens.
+	impl_endian(ast).into()
 }
 
 /// Code generator for Endian implementations
@@ -100,7 +97,7 @@ fn impl_endian(ast: DeriveInput) -> Tokens {
 	let generics: &Generics = &ast.generics;
 	match ast.data {
 		//  Attempt to derive Endian for an integer-repr enum
-		Data::Enum(ref _variants) => codegen_enum(name, &ast.attrs),
+		Data::Enum(_) => codegen_enum(name, &ast.attrs),
 		Data::Struct(DataStruct { ref fields, .. }) =>  match *fields {
 			//  Normal struct: named fields
 			Fields::Named(FieldsNamed { ref named, .. }) => {
@@ -111,13 +108,13 @@ fn impl_endian(ast: DeriveInput) -> Tokens {
 					Some(ref n) => n,
 					None => unreachable!("All fields in a struct must be named"),
 				}).collect();
-				codegen_struct(name, generics, &names[..])
+				codegen_struct(name, generics, &names)
 			},
 			//  Tuple struct: unnamed fields
 			Fields::Unnamed(FieldsUnnamed { ref unnamed, .. }) => {
 				let nums: Vec<Index> = (0 .. unnamed.len()).map(|n| n.into())
 					.collect();
-				codegen_struct(name, generics, &nums[..])
+				codegen_struct(name, generics, &nums)
 			},
 			//  Unit struct: no fields
 			//  This is simple: all Endian functions are just the identity
@@ -140,7 +137,7 @@ fn impl_endian(ast: DeriveInput) -> Tokens {
 			//
 			//  fn func(self) -> Self { Self { /* fields */ } }
 			//
-			//  which, when fields is empty, leaves `Self { }` as the output
+			//  which, when `fields` is empty, leaves `Self { }` as the output
 			//  token. Since this is legal, there is no special case for
 			//  handling empty field sets.
 			Fields::Unit => codegen_struct::<Index>(name, generics, &[]),
@@ -154,7 +151,7 @@ fn impl_endian(ast: DeriveInput) -> Tokens {
 /// Generate the Endian impl for an enum with an integer repr and no data body.
 fn codegen_enum(name: &Ident, attrs: &[Attribute]) -> Tokens {
 	//  Find the attr that is #[repr(_)]. We need to build one for comparison.
-	let repr_path: Path = Ident::from("repr").into();
+	let repr_path: syn::Path = Ident::from("repr").into();
 	//  Seek for a #[repr(_)] attribute
 	let repr: &Meta = &attrs.iter().find(|ref a| &a.path == &repr_path)
 	//  Unwrap, and panic if this returned None instead of Some, because repr is
@@ -171,17 +168,20 @@ fn codegen_enum(name: &Ident, attrs: &[Attribute]) -> Tokens {
 	let kind: &Ident = match *repr {
 		Meta::List(MetaList { ref nested, .. }) => {
 			if nested.len() != 1 {
-				panic!("The #[repr()] attribute must have one item inside it");
+				panic!("The #[repr()] attribute must be a single primitive integer type");
 			}
 			match nested[0] {
 				NestedMeta::Meta(Meta::Word(ref ty)) => ty,
-				_ => panic!("The #[repr()] interior must not be a literal token"),
+				_ => panic!("The #[repr()] interior must be a primitive integer type"),
 			}
 		},
-		_ => unreachable!("The #[repr()] attribute can only be Meta::List"),
+		_ => unreachable!("The #[repr()] interior must be a primitive integer type"),
 	};
 	if kind == &Ident::from("C") {
 		panic!("#[repr(C)] enums cannot implement Endian");
+	}
+	else if kind == &Ident::from("packed") {
+		panic!("#[repr(packed)] enums cannot implement Endian");
 	}
 	quote! {
 		impl Endian for #name {

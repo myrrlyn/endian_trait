@@ -49,3 +49,18 @@ fn flip_notc() {
 	assert_eq!(cb.from_be(), get_notc());
 	assert_eq!(cl.from_le(), get_notc());
 }
+
+#[test]
+fn notc_bytes() { unsafe {
+	use std::mem::transmute;
+	let cb = get_notc().to_be();
+
+	let b: [u8; 2] = transmute(cb.b);
+	assert_eq!(b, [0x12, 0x34]);
+
+	let d: [u8; 4] = transmute(cb.d);
+	assert_eq!(d, [0xde, 0xad, 0xbe, 0xef]);
+
+	let f: [u8; 8] = transmute(cb.f);
+	assert_eq!(f, [0xc0, 0x01, 0xc0, 0xde, 0xab, 0xad, 0x1d, 0xea]);
+} }

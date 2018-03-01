@@ -1,78 +1,43 @@
-/*! Implement `Endian` on mutable slices and standard arrays.
+/*! Implement `Endian` on standard arrays.
 
 I want this library to remain zero-allocation, so I can't return a new Vec that
 has executed the conversion, and without type-level integers I can't accept
-arbitrary slices.
+arbitrary arrays.
 
-This mutates a slice or array in place, replacing each element with its
-converted form.
+This mutates an array in place, replacing each element with its converted form.
 !*/
 
 use super::Endian;
 use std::ptr;
 
-/// This is gonna get ... weird.
-///
-/// I really should just make Endian require Copy, and there's still time to do
-/// that as I'm in the 0.* series still, but that's not STRICTLY SPEAKING
-/// necessary. I haven't yet done anything truly stupid like impl Endian for *T,
-/// since pointers should never ever leave their host context.
-///
-/// Anyway. Implementing Endian on slices of Endian items, where I did not
-/// require that Endian: Copy + !Drop.
-///
-/// The Endian trait consumes its input and returns a new value for output; it
-/// does not take references. However, we cannot move out of a borrowed slice.
-/// The solution to this is, unfortunately, unsafe C-style code. We loop across
-/// the slice, using ptr::read to bitwise-copy the value out of the slice and
-/// into local context, where we then invoke its Endian implementation, and then
-/// use ptr::write to bitwise-copy the new value back into the slice. The ptr
-/// read and write methods do not invoke Drop on the values they move, so from
-/// the type's perspective, nothing happens; this operation purely affects the
-/// bitwise memory repr of the instance.
-macro_rules! flip_collection {
-	() => {
-		#[allow(unused_mut)]
-		fn from_be(mut self) -> Self {
-			for el in self.iter_mut() { unsafe {
-				ptr::write(el, ptr::read(el).from_be());
-			} }
-			self
-		}
-		#[allow(unused_mut)]
-		fn from_le(mut self) -> Self {
-			for el in self.iter_mut() { unsafe {
-				ptr::write(el, ptr::read(el).from_le());
-			} }
-			self
-		}
-		#[allow(unused_mut)]
-		fn to_be(mut self) -> Self {
-			for el in self.iter_mut() { unsafe {
-				ptr::write(el, ptr::read(el).to_be());
-			} }
-			self
-		}
-		#[allow(unused_mut)]
-		fn to_le(mut self) -> Self {
-			for el in self.iter_mut() { unsafe {
-				ptr::write(el, ptr::read(el).to_le());
-			} }
-			self
-		}
-	};
-}
-
-//  Implement across any slice
-impl<'a, T> Endian for &'a mut [T] where T: Endian {
-	flip_collection!();
-}
-
 //  Implement on specific array length types
 macro_rules! implendian_a {
 	( $( $n:expr, )* ) => { $(
-		impl<T> Endian for [T; $n] where T: Endian {
-			flip_collection!();
+		impl<T: Endian> Endian for [T; $n] {
+			fn from_be(mut self) -> Self {
+				for el in self.iter_mut() { unsafe {
+					ptr::write(el, ptr::read(el).from_be());
+				} }
+				self
+			}
+			fn from_le(mut self) -> Self {
+				for el in self.iter_mut() { unsafe {
+					ptr::write(el, ptr::read(el).from_le());
+				} }
+				self
+			}
+			fn to_be(mut self) -> Self {
+				for el in self.iter_mut() { unsafe {
+					ptr::write(el, ptr::read(el).to_be());
+				} }
+				self
+			}
+			fn to_le(mut self) -> Self {
+				for el in self.iter_mut() { unsafe {
+					ptr::write(el, ptr::read(el).to_le());
+				} }
+				self
+			}
 		}
 	)* };
 }
@@ -102,30 +67,12 @@ mod tests {
 	use Endian;
 
 	#[test]
-	fn slices() {
-		let src = [
-			1, 2, 3, 4, 5, 6, 7, 8,
-		];
-		let flip = src.clone();
-		let mut comp = src.clone();
-
-		//  Flip one slice via the Endian trait method
-		let rflip: &[i32] = &flip.to_be();
-		//  Flip the other by looping over it and using the inherent method
-		for e in comp.iter_mut() {
-			*e = e.to_be();
-		}
-
-		assert_eq!(rflip, comp);
-	}
-
-	#[test]
 	fn arrays() {
-		let src = [
+		let src: [i32; 8] = [
 			1, 2, 3, 4, 5, 6, 7, 8,
 		];
-		let flip = src.clone().to_be();
-		let mut comp = src.clone();
+		let flip: [i32; 8] = src.clone().to_be();
+		let mut comp: [i32; 8] = src.clone();
 		for e in comp.iter_mut() {
 			*e = e.to_be();
 		}

@@ -1,6 +1,6 @@
 [package]
 name = "endian_trait_derive"
-version = "0.4.0"
+version = "0.5.0"
 authors = [
 	"myrrlyn <myrrlyn@outlook.com>",
 ]
@@ -30,8 +30,9 @@ features = [
 	"extra-traits",
 ]
 
-[dev-dependencies]
-endian_trait = "0.4"
+[dev-dependencies.endian_trait]
+path = ".."
+version = "0.5"
 
 [badges.gitlab]
 repository = "myrrlyn/endian_trait"

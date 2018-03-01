@@ -2,6 +2,11 @@
 
 List of notable changes to the custom-derive macro for the `Endian` trait.
 
+## 0.5.0
+
+Updated `CONTRIBUTING.md` to reflect that this crate is more or less feature
+complete.
+
 ## 0.4.0
 
 ### Added

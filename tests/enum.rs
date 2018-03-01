@@ -114,7 +114,7 @@ fn derive_c() {
 //  This fails because the body adds size to the discriminant, and the transmute
 //  call powering the Endian transform will not succeed.
 #[test]
-// #[compile_fail]
+#[compile_fail]
 #[should_panic]
 fn derive_bodied() {
 	#[repr(i16)]

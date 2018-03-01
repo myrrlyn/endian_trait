@@ -10,9 +10,8 @@ disabled, compilation must succeed.
 /*
 #![compile_fail]
 
-extern crate endian_trait;
 #[macro_use]
-extern crate endian_trait_derive;
+extern crate endian_trait;
 
 use endian_trait::Endian;
 

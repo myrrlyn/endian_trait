@@ -173,3 +173,5 @@ implendian_f!(f32, f64);
 
 #[cfg(feature = "arrays")]
 pub mod arrays;
+
+pub mod slices;

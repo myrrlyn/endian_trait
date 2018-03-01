@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+### Changed
+
+The implementation of `Endian` on `&mut [Endian]` is now provided by default,
+and is not kept behind a feature gate. The feature gate `arrays` is still
+required to access the implementations on the `[Endian; N]` implementations.
+
 ## 0.4.0
 
 ### Added
