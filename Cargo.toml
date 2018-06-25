@@ -1,6 +1,6 @@
 [package]
 name = "endian_trait"
-version = "0.5.0"
+version = "0.6.0"
 authors = [
 	"myrrlyn <myrrlyn@outlook.com>",
 ]
@@ -17,11 +17,10 @@ exclude = [
 
 [dependencies.endian_trait_derive]
 path = "endian_trait_derive"
-version = "0.5.0"
+version = "0.6.0"
 
 [features]
 arrays = []
-e128 = []
 
 [workspace]
 members = [

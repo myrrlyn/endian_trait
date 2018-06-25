@@ -9,11 +9,6 @@ to `::std::i32::from_be(n: i32)`
 
 #![deny(missing_docs)]
 
-#![cfg_attr(
-	feature = "e128",
-	feature(i128_type)
-)]
-
 //  Re-export the custom-derive so that users don't need two crates explicitly.
 #[allow(unused_imports)]
 #[macro_use]
@@ -53,15 +48,19 @@ pub trait Endian {
 macro_rules! implendian {
 	( $( $t:tt ),* ) => { $(
 		impl Endian for $t {
+			#[inline(always)]
 			fn from_be(self) -> Self {
 				$t::from_be(self)
 			}
+			#[inline(always)]
 			fn from_le(self) -> Self {
 				$t::from_le(self)
 			}
+			#[inline(always)]
 			fn to_be(self) -> Self {
 				$t::to_be(self)
 			}
+			#[inline(always)]
 			fn to_le(self) -> Self {
 				$t::to_le(self)
 			}
@@ -163,15 +162,12 @@ impl Endian for char {
 }
 
 //  Implement on the integer primitives
-implendian!(i8, u8, i16, u16, i32, u32, i64, u64);
-
-#[cfg(feature = "e128")]
-implendian!(i128, u128);
+implendian!(i8, u8, i16, u16, i32, u32, i64, u64, i128, u128);
 
 //  Implement on floats
 implendian_f!(f32, f64);
 
 #[cfg(feature = "arrays")]
-pub mod arrays;
+mod arrays;
 
-pub mod slices;
+mod slices;

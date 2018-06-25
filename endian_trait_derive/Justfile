@@ -2,6 +2,8 @@ build:
 	cargo check
 	cargo build
 
-publish: build
+pack: build
+	cargo package
+
+publish: pack
 	cargo publish
-	rm -r target/

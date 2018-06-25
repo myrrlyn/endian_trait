@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0
+
+### Changed
+
+Increased the minimum Rust version to 1.26.0 and removed the feature gate for
+128-bit integers, which are now available by default.
+
+Also overhaul the Justfile scripts to ease development.
+
 ## 0.5.0
 
 ### Changed

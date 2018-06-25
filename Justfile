@@ -5,6 +5,10 @@ build:
 doc: test
 	cargo doc
 
+pack: doc
+	just endian_trait_derive/pack
+	cargo package
+
 publish: doc
 	# Publish derive first, since this depends on it
 	just endian_trait_derive/publish
@@ -12,4 +16,4 @@ publish: doc
 
 test: build
 	cargo test --features arrays
-	cargo +nightly test --features arrays,e128
+	cargo +nightly test --features arrays
