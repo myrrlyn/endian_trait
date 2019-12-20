@@ -1,9 +1,10 @@
 [package]
 name = "endian_trait_derive"
-version = "0.6.0"
+version = "1.0.0"
 authors = [
 	"myrrlyn <myrrlyn@outlook.com>",
 ]
+edition = "2018"
 license = "MIT"
 description = "A custom derive for the Endian trait"
 keywords = [
@@ -11,7 +12,7 @@ keywords = [
 	"custom-derive",
 ]
 readme = "README.md"
-repository = "https://gitlab.com/myrrlyn/endian_trait"
+repository = "https://github.com/myrrlyn/endian_trait"
 workspace = ".."
 exclude = [
 	"Justfile",
@@ -22,16 +23,17 @@ proc-macro = true
 doctest = false
 
 [dependencies]
-quote = "0.4"
+proc-macro2 = "1"
+quote = "1"
 
 [dependencies.syn]
-version = "0.12"
+version = "1"
 features = [
 	"derive",
 	"extra-traits",
 ]
 
-[badges.gitlab]
+[badges.github]
 repository = "myrrlyn/endian_trait"
 branch = "master"
 

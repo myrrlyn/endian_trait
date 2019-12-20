@@ -21,7 +21,6 @@ and consumer are the same Rust version.
 This crate shouldn't be used directly; use
 
 ```rust,no-run
-#[macro_use]
 extern crate endian_trait;
 # fn main() {}
 ```
@@ -33,13 +32,11 @@ that is syntactically valid but will fail to compile without the `endian_trait`
 crate and `Endian` trait in scope.
 
 ```rust
-#[macro_use]
 extern crate endian_trait;
 # // This is needed because of the fact that the test is executed from within
 # // the context of the derive crate. The tests in the trait crate demonstrate
 # // that the macro is correctly re-exported.
-# #[macro_use]
-# extern crate endian_trait_derive;
+# # extern crate endian_trait_derive;
 
 use endian_trait::Endian;
 
@@ -52,19 +49,22 @@ struct Foo<A: Endian, B: Endian> {
 ```
 !*/
 
-extern crate proc_macro;
-#[macro_use]
+extern crate proc_macro as pm;
+extern crate proc_macro2 as pm2;
 extern crate quote;
 extern crate syn;
 
-use proc_macro::TokenStream;
 use quote::{
-	Tokens,
 	ToTokens,
+	quote,
 };
+
+use std::iter;
+
 use syn::{
 	Attribute,
 	Data,
+	DataEnum,
 	DataStruct,
 	DeriveInput,
 	Fields,
@@ -76,171 +76,237 @@ use syn::{
 	Meta,
 	MetaList,
 	NestedMeta,
+	Path,
+	Variant,
+	spanned::Spanned,
 };
 
 /// Hook for receiving `#[derive(Endian)]` code
 #[proc_macro_derive(Endian)]
-pub fn endian_trait(source: TokenStream) -> TokenStream {
-	//  A parse failure means that the input was invalid Rust. This is not our
-	//  problem, so a panic is permissible.
-	let ast = syn::parse(source).unwrap();
-	//  Take the parsed AST and pass it into the actual worker function, then
-	//  convert the results back into Rust tokens.
-	impl_endian(ast).into()
+pub fn derive(source: pm::TokenStream) -> pm::TokenStream {
+	derive2(source.into()).unwrap_or_else(|err| err.to_compile_error()).into()
 }
 
-/// Code generator for Endian implementations
-fn impl_endian(ast: DeriveInput) -> Tokens {
-	//  Get the name of the struct on which Endian is to be implemented
-	let name: &Ident = &ast.ident;
-	//  Get any generics from the struct
-	let generics: &Generics = &ast.generics;
+fn derive2(tokens: pm2::TokenStream) -> syn::Result<pm2::TokenStream> {
+	let ast = syn::parse2::<DeriveInput>(tokens)?;
+	//  Get the name of the typedef on which `Endian` is to be implemented.
+	let name = &ast.ident;
+	//  Get any generics from the typedef.
+	let generics = &ast.generics;
 	match ast.data {
-		//  Attempt to derive Endian for an integer-repr enum
-		Data::Enum(_) => codegen_enum(name, &ast.attrs),
-		Data::Struct(DataStruct { ref fields, .. }) =>  match *fields {
-			//  Normal struct: named fields
-			Fields::Named(FieldsNamed { ref named, .. }) => {
-				//  Collect references to all the field names. A precondition of
-				//  reaching this code path is that all fields HAVE names, so it
-				//  is safe to have an unreachable trap in the None condition.
-				let names: Vec<&Ident> = named.iter().map(|f| match f.ident {
-					Some(ref n) => n,
-					None => unreachable!("All fields in a struct must be named"),
-				}).collect();
-				codegen_struct(name, generics, &names)
-			},
-			//  Tuple struct: unnamed fields
-			Fields::Unnamed(FieldsUnnamed { ref unnamed, .. }) => {
-				let nums: Vec<Index> = (0 .. unnamed.len()).map(|n| n.into())
-					.collect();
-				codegen_struct(name, generics, &nums)
-			},
-			//  Unit struct: no fields
-			//  This is simple: all Endian functions are just the identity
-			//  function. Note that Unit structs are a subset of zero-sized
-			//  types: specifically, unit has zero fields, while ZST is the set
-			//  of all structs with zero or more fields which are all of zero
-			//  size. Unit structs are specifically:
-			//
-			//  - ()
-			//  - struct Foo;
-			//  - struct Foo();
-			//  - struct Foo{};
-			//
-			//  All ZST types eventually bottom out here; the interim can be
-			//  handled by the other branches.
-			//
-			//  RFC #1506 (stabilized in 1.19) permits unit structs to be
-			//  declared as `Foo {}`. This allows for a deduplication of the
-			//  code generation path: the codegen function emits
-			//
-			//  fn func(self) -> Self { Self { /* fields */ } }
-			//
-			//  which, when `fields` is empty, leaves `Self { }` as the output
-			//  token. Since this is legal, there is no special case for
-			//  handling empty field sets.
-			Fields::Unit => codegen_struct::<Index>(name, generics, &[]),
+		//  Attempt to derive for an integer-repr enum.
+		Data::Enum(DataEnum { variants, .. }) => gen_enum(
+			name,
+			&ast.attrs,
+			variants,
+		),
+		Data::Struct(DataStruct { fields, .. }) => match fields {
+			//  Derive for a record struct
+			Fields::Named(FieldsNamed { ref named, .. }) => gen_struct(
+				name,
+				generics,
+				named.iter()
+					.map(|f| f.ident.clone().ok_or_else(|| syn::Error::new(
+						f.span(),
+						"All fields in a struct must be named",
+					)))
+					.collect::<syn::Result<Vec<_>>>()?,
+			),
+			//  Derive for a tuple struct
+			Fields::Unnamed(FieldsUnnamed { ref unnamed, .. }) => gen_struct(
+				name,
+				generics,
+				(0 .. unnamed.len()).map(|n| Index {
+					index: n as u32,
+					span: fields.span(),
+				}),
+			),
+			//  Derive for a zero-sized struct
+			Fields::Unit => gen_struct(name, generics, iter::empty::<Ident>()),
 		},
-		Data::Union(_) => {
-			unimplemented!("Proc-macro derives are not yet allowed on unions");
-		},
+		Data::Union(..) => return Err(syn::Error::new(
+			name.span(),
+			"Rust does not currently permit `#[derive(Trait)]` attributes on \
+			`union` types",
+		)),
 	}
 }
 
 /// Generate the Endian impl for an enum with an integer repr and no data body.
-fn codegen_enum(name: &Ident, attrs: &[Attribute]) -> Tokens {
-	//  Find the attr that is #[repr(_)]. We need to build one for comparison.
-	let repr_path: syn::Path = Ident::from("repr").into();
-	//  Seek for a #[repr(_)] attribute
-	let repr: &Meta = &attrs.iter().find(|ref a| &a.path == &repr_path)
-	//  Unwrap, and panic if this returned None instead of Some, because repr is
-	//  the bare minimum of required attributes
-	.expect("Endian can only be derived on enums with #[repr()] attributes")
-	//  Take a reference to the actual value of the attribute, which is
-	//  "repr(_)" from the source.
-	.interpret_meta()
-	.expect("#[repr(_)] cannot fail to be interpreted");
-	//  Now figure out what the repr *is*. The format is #[repr(Name)] where
-	//  Name is one of {i,u}{8,16,32,64}. This comes out to be a
-	//  List(MetaList(Vec<Meta>, ..)) in syn structures. We want the one-element
-	//  Vec's one element. Anything else is broken.
-	let kind: &Ident = match *repr {
-		Meta::List(MetaList { ref nested, .. }) => {
-			if nested.len() != 1 {
-				panic!("The #[repr()] attribute must be a single primitive integer type");
+fn gen_enum<'a>(
+	name: &Ident,
+	attrs: impl IntoIterator<Item = &'a Attribute>,
+	variants: impl IntoIterator<Item = Variant>,
+) -> syn::Result<pm2::TokenStream> {
+	/* There is only one valid path through the syntax tree for working with
+	enums. Rather than drift rightward at each layer, the processing code
+	produces a `syn::Result` at each step, and bubbles errors.
+
+	This could be replaced with a series of `.and_then` calls.
+
+	First, find the attribute that is `#[repr]`. This must be present in order
+	to make the enum `Endian`, as otherwise it has no fixed memory type.
+	*/
+	match match match attrs.into_iter().find(|a| a.path
+		.segments
+		.iter()
+		.last()
+		.expect("Attribute paths will always have a final segment")
+		.ident == "repr"
+	).ok_or_else(|| syn::Error::new(
+		name.span(),
+		"`#[derive(Endian)]` requires a `#[repr]` of `C` or some integer for \
+		enums",
+	))?
+	//  Once a `#[repr]` attribute is discovered, parse it as an attribute and
+	//  query its internals.
+	.parse_meta()? {
+		/* `#[repr(_)]` produces `Meta::List` as its arg type. Anything else is
+		invalid. Strictly speaking, this check allows `#[repr(one, two)]`, but
+		it is up to the compiler to reject that for us.
+
+		Extract the interior nested item.
+		*/
+		Meta::List(MetaList { ref nested, .. }) => nested.into_iter()
+			.next()
+			.ok_or_else(|| syn::Error::new(
+				nested.span(),
+				"`#[repr(_)]` attributes must contain `C` or an an integer type",
+			)),
+		other => Err(syn::Error::new(
+			other.span(),
+			"`#[repr(_)]` attributes must only contain `C` or an integer type",
+		)),
+	}? {
+		/* The inner item must be a `Path`-type object, which must have one
+		component. Types other than the Rust fundamental integers are not
+		supported.
+		*/
+		NestedMeta::Meta(Meta::Path(Path { ref segments, .. })) => segments
+			.into_iter()
+			.last()
+			.map(|ps| &ps.ident)
+			.ok_or_else(|| syn::Error::new(
+				segments.span(),
+				"`#[repr()]` attributes must contain a representation type",
+			)),
+		other => Err(syn::Error::new(
+			other.span(),
+			"Invalid contents of `#[repr()]`",
+		)),
+	}? {
+		//  Test if the representation is one of the named symbols, which are
+		//  not supported.
+		kind if kind == "C" || kind == "packed" => Err(syn::Error::new(
+			kind.span(),
+			"`#[repr(C)]` and `#[repr(packed)]` enums cannot currently \
+			implement `Endian`",
+		)),
+		//  Test if the representation is a Rust fundamental integer.
+		kind if kind == "i8" || kind == "i16" || kind == "i32" || kind == "i64"
+		|| kind == "u8" || kind == "u16" || kind == "u32" || kind == "u64"
+		|| kind == "i128" || kind == "u128" => {
+			//  Check that each variant of the enum has no data.
+			for var in variants {
+				if let Fields::Unit = var.fields {}
+				else {
+					return Err(syn::Error::new(
+						var.fields.span(),
+						"`Endian` cannot be derived on enums with data fields",
+					));
+				}
 			}
-			match nested[0] {
-				NestedMeta::Meta(Meta::Word(ref ty)) => ty,
-				_ => panic!("The #[repr()] interior must be a primitive integer type"),
-			}
+			/* To implement `Endian`, each function casts a pointer to `Self`
+			into a pointer to the `repr` type, then runs the `Endian` function
+			on the pointed-to value, and stores the transformed value back in
+			the `self` slot. This introduces undefined behavior, in that the
+			enum now contains a value not enumerated in the symbol list;
+			however, in practice, this appears to not matter as long as the enum
+			value is not used as its own type until transformed back into a
+			valid variant.
+
+			The expression `enum_value.to_be().from_be()` operates correctly as
+			of 1.31.
+			*/
+			Ok(quote! {
+				impl Endian for #name {
+					fn from_be(mut self) -> Self {
+						let ptr = &mut self as *mut Self as *mut #kind;
+						unsafe { ptr.write(Endian::from_be(ptr.read())) }
+						self
+					}
+					fn from_le(mut self) -> Self {
+						let ptr = &mut self as *mut Self as *mut #kind;
+						unsafe { ptr.write(Endian::from_le(ptr.read())) }
+						self
+					}
+					fn to_be(mut self) -> Self {
+						let ptr = &mut self as *mut Self as *mut #kind;
+						unsafe { ptr.write(Endian::to_be(ptr.read())) }
+						self
+					}
+					fn to_le(mut self) -> Self {
+						let ptr = &mut self as *mut Self as *mut #kind;
+						unsafe { ptr.write(Endian::to_le(ptr.read())) }
+						self
+					}
+				}
+			})
 		},
-		_ => unreachable!("The #[repr()] interior must be a primitive integer type"),
-	};
-	if kind == &Ident::from("C") {
-		panic!("#[repr(C)] enums cannot implement Endian");
-	}
-	else if kind == &Ident::from("packed") {
-		panic!("#[repr(packed)] enums cannot implement Endian");
-	}
-	quote! {
-		impl Endian for #name {
-			fn from_be(self) -> Self { unsafe {
-				use std::mem::transmute;
-				let raw: #kind = transmute(self);
-				transmute(raw.from_be())
-			} }
-			fn from_le(self) -> Self { unsafe {
-				use std::mem::transmute;
-				let raw: #kind = transmute(self);
-				transmute(raw.from_le())
-			} }
-			fn to_be(self) -> Self { unsafe {
-				use std::mem::transmute;
-				let raw: #kind = transmute(self);
-				transmute(raw.to_be())
-			} }
-			fn to_le(self) -> Self { unsafe {
-				use std::mem::transmute;
-				let raw: #kind = transmute(self);
-				transmute(raw.to_le())
-			} }
-		}
+		kind => Err(syn::Error::new(
+			kind.span(),
+			"`#[repr(T)]` must have `T` be one of the Rust fundamental integer \
+			types",
+		))
 	}
 }
 
-/// Generates Rust code to impl Endian on the given struct declaration.
-///
-/// This requires the struct's name, its generic information (if any), and its
-/// fields (if any).
-///
-/// Thanks to RFC #1506 (stabilized in 1.19), this can be a single code path for
-/// all three types of struct definition: standard, tuple, and unit.
-fn codegen_struct<T: ToTokens>(name: &Ident, generics: &Generics, fields: &[T]) -> Tokens {
-	//  We need left and right access to each name so that the stepper can draw
-	//  from each once, rather than advancing the name iterator twice per step.
-	//  Without this, the stepper would have incorrect behavior consuming the
-	//  old field and inserting it into the new.
-	let (l, r) = (fields, fields);
-	//  Split the type's generics into appropriate forms for the impl block.
+/// Generate the Endian impl for a struct type.
+fn gen_struct(
+	name: &Ident,
+	generics: &Generics,
+	fields: impl IntoIterator<Item = impl Clone + ToTokens>,
+) -> syn::Result<pm2::TokenStream> {
+	/* Due to how `quote!` handles iterators, the sequence of field names must
+	be collected into a `Vec` and then cloned, so that each name can be used
+	twice in the `quote!` body. Otherwise, `quote!` would advance the iterator
+	twice per expansion, which is very incorrect.
+	*/
+	let l = fields.into_iter().collect::<Vec<_>>();
+	let r = l.clone();
+	//  Generics must be split into appropriate forms for the impl block.
 	let (g_impl, g_ty, g_where) = generics.split_for_impl();
-	//  Build Rust code that is the impl block and each function, consuming self
-	//  and building a new Self instance that is the result of applying the
-	//  Endian conversion to each field.
-	quote! {
+	/* Structs are recursively Endian: the conversion is just a conversion of
+	each member, as the tree eventually ends in leaves of Rust fundamentals with
+	provided implementations.
+
+	RFC #1506 introduced a universal struct syntax to unify the three struct
+	types: all structs can be described with `Name { fields… }` syntax. Record
+	structs are unchanged, tuple structs are `Name { 0: val, …}`, and zero-size
+	structs can be written as `Name {}` (empty records).
+	*/
+	Ok(quote! {
 		impl #g_impl Endian for #name #g_ty #g_where {
-			fn from_be(self) -> Self { Self {
-				#( #l: Endian::from_be(self.#r), )*
-			} }
-			fn from_le(self) -> Self { Self {
-				#( #l: Endian::from_le(self.#r), )*
-			} }
-			fn to_be(self) -> Self { Self {
-				#( #l: Endian::to_be(self.#r), )*
-			} }
-			fn to_le(self) -> Self { Self {
-				#( #l: Endian::to_le(self.#r), )*
-			} }
+			fn from_be(self) -> Self {
+				Self {
+					#( #l: Endian::from_be(self.#r), )*
+				}
+			}
+			fn from_le(self) -> Self {
+				Self {
+					#( #l: Endian::from_le(self.#r), )*
+				}
+			}
+			fn to_be(self) -> Self {
+				Self {
+					#( #l: Endian::to_be(self.#r), )*
+				}
+			}
+			fn to_le(self) -> Self {
+				Self {
+					#( #l: Endian::to_le(self.#r), )*
+				}
+			}
 		}
-	}
+	})
 }

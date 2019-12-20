@@ -22,20 +22,19 @@ currently beyond the scope of this library.
 
 ## Usage
 
-**MINIMUM RUST VERSION: 1.20**
+**MINIMUM RUST VERSION: 1.31**
 
 Require this crate (`endian_trait`) in your Cargo.toml, and tag it with
 `#[macro_use]` for access to the custom derive macro.
 
 ```toml
 [dependencies]
-endian_trait = "0.5"
+endian_trait = "1"
 ```
 
 Import them in your crate root:
 
 ```rust
-#[macro_use]
 extern crate endian_trait;
 ```
 
@@ -67,10 +66,10 @@ let q = Quux {
 let q2: Quux = q.from_be();
 ```
 
-### Useful ... Usage
+### Useful … Usage
 
-Endian conversions destroy the utility, and in some cases (floats, chars) the
-validity, of the data on which they are performed. Once data is transformed
+Endian conversions destroy the utility, and in some cases (floats, chars, enums)
+the validity, of the data on which they are performed. Once data is transformed
 away from local endian, it can no longer be used as anything but a bare sequence
 of bytes with no further meaning. Similarly, the transformations from an order
 to local endian are only useful to perform on a sequence of bytes that are known
@@ -105,9 +104,11 @@ Do keep in mind that once data is converted to a transport endian order, it can
 no longer be considered as anything but a collection of bytes. Converting a char
 or float will almost always result in a bit pattern that is invalid to be read
 as its stated type, and will remain so until converted back to native order on
-the other side. The `From` and `Into` impls used for binary ser/des should just
-be transmutes and byte shunts, as they will be likely working with data that is
-the correct width but of logically invalid form.
+the other side. Converting an enum will result in undefined behavior if the
+enum is used as its own type rather than an untyped sequence of bytes. The
+`From` and `Into` impls used for binary ser/des should just be transmutes and
+byte shunts, as they will be likely working with data that is the correct width
+but of logically invalid form.
 
 You could also move the endian conversions into the `From`/`Into` methods, but I
 personally prefer keeping those uncoupled.
@@ -117,22 +118,16 @@ There's really no other reason to use this trait, as far as I'm aware.
 ## Extra Features
 
 You can compile with `--features arrays` to have Endian implemented on arrays
-`[T: Endian; N]` where N is in the range 0 ≤ N ≤ 256. That's right; I support
-eight times as many arrays as the standard library does.
-
-We really need type level integers.
-
-On nightly ([RFC #1504][0], [issue #35118][1]), you can compile with
-`--features e128` to have Endian implemented on `i128` and `u128`.
+`[T: Endian; N]` where N is in the range 0 ≤ N ≤ 32. When const-generics are
+stabilized, this crate will update to use them.
 
 In your `Cargo.toml`, replace the original dependency on `endian_trait` with:
 
 ```toml
 [dependencies.endian_trait]
-version = 0.5
+version = 1
 features = [
     "arrays",
-    "e128", # currently only available on nightly, issue #35118, RFC #1504
 ]
 ```
 

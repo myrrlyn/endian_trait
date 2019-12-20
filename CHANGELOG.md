@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0
+
+Updated the `derive` macro to use the stabilized procedural-macro crates.
+The library now uses the 2018 edition of Rust, and has a minimum compiler
+version of `1.31.0`.
+
 ## 0.6.0
 
 ### Changed

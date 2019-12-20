@@ -8,7 +8,6 @@ being supported. Proc-macro panics are compile-time, not runtime, so this test
 cannot be run directly.
 !*/
 
-#[macro_use]
 extern crate endian_trait;
 
 use endian_trait::Endian;

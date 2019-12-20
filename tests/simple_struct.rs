@@ -1,7 +1,6 @@
 /*! Test Endian derivation on normal structs composed of primitives
 !*/
 
-#[macro_use]
 extern crate endian_trait;
 
 use endian_trait::Endian;

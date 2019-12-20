@@ -13,7 +13,6 @@ will just erase them all during monomorphization.
 ¯\_(ツ)_/¯ 🤷
 !*/
 
-#[macro_use]
 extern crate endian_trait;
 
 use endian_trait::Endian;

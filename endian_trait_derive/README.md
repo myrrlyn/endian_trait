@@ -22,7 +22,6 @@ endian_trait = "0.5"
 ```
 
 ```rust
-#[macro_use]
 extern crate endian_trait;
 ```
 
